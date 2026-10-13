@@ -1,0 +1,241 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model avaliacao_beta {
+  id_avaliacao       String                            @id @db.Char(36)
+  id_usuario         String                            @db.Char(36)
+  tipo_usuario_teste avaliacao_beta_tipo_usuario_teste
+  nota_usabilidade   Int?
+  nota_utilidade     Int?
+  comentario         String?                           @db.Text
+  criada_em          DateTime?                         @default(now()) @db.Timestamp(0)
+  usuario            usuario                           @relation(fields: [id_usuario], references: [id_usuario], onDelete: Cascade, onUpdate: NoAction, map: "avaliacao_beta_ibfk_1")
+
+  @@index([id_usuario], map: "id_usuario")
+}
+
+model consentimento_lgpd {
+  id_consentimento   String    @id @db.Char(36)
+  id_usuario         String    @db.Char(36)
+  tipo_consentimento String    @db.VarChar(50)
+  versao_termo       String    @db.VarChar(30)
+  aceite             Boolean
+  data_registro      DateTime? @default(now()) @db.Timestamp(0)
+  usuario            usuario   @relation(fields: [id_usuario], references: [id_usuario], onDelete: Cascade, onUpdate: NoAction, map: "consentimento_lgpd_ibfk_1")
+
+  @@index([id_usuario], map: "id_usuario")
+}
+
+model conversa {
+  id_conversa   String           @id @db.Char(36)
+  id_match      String           @unique(map: "id_match") @db.Char(36)
+  status        conversa_status? @default(aberta)
+  criada_em     DateTime?        @default(now()) @db.Timestamp(0)
+  match_conexao match_conexao    @relation(fields: [id_match], references: [id_match], onDelete: Cascade, onUpdate: NoAction, map: "conversa_ibfk_1")
+  mensagem      mensagem[]
+}
+
+model interesse {
+  id_interesse  String                 @id @db.Char(36)
+  id_startup    String                 @db.Char(36)
+  id_investidor String                 @db.Char(36)
+  iniciado_por  interesse_iniciado_por
+  status        interesse_status?      @default(pendente)
+  mensagem      String?                @db.Text
+  criado_em     DateTime?              @default(now()) @db.Timestamp(0)
+  startup       startup                @relation(fields: [id_startup], references: [id_startup], onDelete: Cascade, onUpdate: NoAction, map: "interesse_ibfk_1")
+  investidor    investidor             @relation(fields: [id_investidor], references: [id_investidor], onDelete: Cascade, onUpdate: NoAction, map: "interesse_ibfk_2")
+
+  @@unique([id_startup, id_investidor], map: "id_startup")
+  @@index([id_investidor], map: "id_investidor")
+}
+
+model investidor {
+  id_investidor       String                     @id @db.Char(36)
+  id_usuario          String                     @unique(map: "id_usuario") @db.Char(36)
+  tipo_investidor     investidor_tipo_investidor
+  tese_investimento   String?                    @db.Text
+  faixa_minima        Decimal?                   @db.Decimal(15, 2)
+  faixa_maxima        Decimal?                   @db.Decimal(15, 2)
+  cidade              String?                    @db.VarChar(100)
+  uf                  String?                    @db.Char(2)
+  perfil_publico      Boolean?                   @default(true)
+  interesse           interesse[]
+  usuario             usuario                    @relation(fields: [id_usuario], references: [id_usuario], onDelete: Cascade, onUpdate: NoAction, map: "investidor_ibfk_1")
+  investidor_segmento investidor_segmento[]
+  match_conexao       match_conexao[]
+}
+
+model investidor_segmento {
+  id_investidor String     @db.Char(36)
+  id_segmento   String     @db.Char(36)
+  prioridade    Int?       @default(1)
+  criado_em     DateTime?  @default(now()) @db.Timestamp(0)
+  investidor    investidor @relation(fields: [id_investidor], references: [id_investidor], onDelete: Cascade, onUpdate: NoAction, map: "investidor_segmento_ibfk_1")
+  segmento      segmento   @relation(fields: [id_segmento], references: [id_segmento], onDelete: Cascade, onUpdate: NoAction, map: "investidor_segmento_ibfk_2")
+
+  @@id([id_investidor, id_segmento])
+  @@index([id_segmento], map: "id_segmento")
+}
+
+model match_conexao {
+  id_match              String                @id @db.Char(36)
+  id_startup            String                @db.Char(36)
+  id_investidor         String                @db.Char(36)
+  score_compatibilidade Decimal?              @db.Decimal(5, 2)
+  status                match_conexao_status? @default(ativo)
+  origem                match_conexao_origem? @default(organico)
+  data_match            DateTime?             @default(now()) @db.Timestamp(0)
+  conversa              conversa?
+  startup               startup               @relation(fields: [id_startup], references: [id_startup], onDelete: Cascade, onUpdate: NoAction, map: "match_conexao_ibfk_1")
+  investidor            investidor            @relation(fields: [id_investidor], references: [id_investidor], onDelete: Cascade, onUpdate: NoAction, map: "match_conexao_ibfk_2")
+
+  @@index([id_investidor], map: "id_investidor")
+  @@index([id_startup], map: "id_startup")
+}
+
+model mensagem {
+  id_mensagem          String    @id @db.Char(36)
+  id_conversa          String    @db.Char(36)
+  id_remetente_usuario String    @db.Char(36)
+  conteudo             String    @db.Text
+  lida_em              DateTime? @db.Timestamp(0)
+  enviada_em           DateTime? @default(now()) @db.Timestamp(0)
+  conversa             conversa  @relation(fields: [id_conversa], references: [id_conversa], onDelete: Cascade, onUpdate: NoAction, map: "mensagem_ibfk_1")
+  usuario              usuario   @relation(fields: [id_remetente_usuario], references: [id_usuario], onDelete: Cascade, onUpdate: NoAction, map: "mensagem_ibfk_2")
+
+  @@index([id_conversa], map: "id_conversa")
+  @@index([id_remetente_usuario], map: "id_remetente_usuario")
+}
+
+model plano_negocio {
+  id_plano               String    @id @db.Char(36)
+  id_startup             String    @db.Char(36)
+  versao                 Int?      @default(1)
+  proposta_valor         String?   @db.Text
+  modelo_receita         String?   @db.Text
+  publico_alvo           String?   @db.Text
+  estrategia_monetizacao String?   @db.Text
+  atualizado_em          DateTime? @default(now()) @db.Timestamp(0)
+  startup                startup   @relation(fields: [id_startup], references: [id_startup], onDelete: Cascade, onUpdate: NoAction, map: "plano_negocio_ibfk_1")
+
+  @@index([id_startup], map: "id_startup")
+}
+
+model segmento {
+  id_segmento         String                @id @db.Char(36)
+  nome                String                @db.VarChar(100)
+  descricao           String?               @db.VarChar(255)
+  investidor_segmento investidor_segmento[]
+  startup_segmento    startup_segmento[]
+}
+
+model startup {
+  id_startup              String             @id @db.Char(36)
+  id_usuario              String             @unique(map: "id_usuario") @db.Char(36)
+  nome_fantasia           String             @db.VarChar(100)
+  cnpj                    String?            @db.VarChar(18)
+  descricao               String?            @db.Text
+  estagio                 startup_estagio
+  investimento_pretendido Decimal?           @db.Decimal(15, 2)
+  cidade                  String?            @db.VarChar(100)
+  uf                      String?            @db.Char(2)
+  interesse               interesse[]
+  match_conexao           match_conexao[]
+  plano_negocio           plano_negocio[]
+  usuario                 usuario            @relation(fields: [id_usuario], references: [id_usuario], onDelete: Cascade, onUpdate: NoAction, map: "startup_ibfk_1")
+  startup_segmento        startup_segmento[]
+}
+
+model startup_segmento {
+  id_startup  String    @db.Char(36)
+  id_segmento String    @db.Char(36)
+  principal   Boolean?  @default(false)
+  criado_em   DateTime? @default(now()) @db.Timestamp(0)
+  startup     startup   @relation(fields: [id_startup], references: [id_startup], onDelete: Cascade, onUpdate: NoAction, map: "startup_segmento_ibfk_1")
+  segmento    segmento  @relation(fields: [id_segmento], references: [id_segmento], onDelete: Cascade, onUpdate: NoAction, map: "startup_segmento_ibfk_2")
+
+  @@id([id_startup, id_segmento])
+  @@index([id_segmento], map: "id_segmento")
+}
+
+model usuario {
+  id_usuario         String               @id @db.Char(36)
+  nome               String               @db.VarChar(150)
+  email              String               @unique(map: "email") @db.VarChar(150)
+  senha_hash         String               @db.VarChar(255)
+  tipo_usuario       usuario_tipo_usuario
+  status             usuario_status?      @default(ativo)
+  criado_em          DateTime?            @default(now()) @db.Timestamp(0)
+  avaliacao_beta     avaliacao_beta[]
+  consentimento_lgpd consentimento_lgpd[]
+  investidor         investidor?
+  mensagem           mensagem[]
+  startup            startup?
+}
+
+enum conversa_status {
+  aberta
+  arquivada
+  bloqueada
+}
+
+enum investidor_tipo_investidor {
+  anjo
+  vc
+  corporate
+  outro
+}
+
+enum avaliacao_beta_tipo_usuario_teste {
+  startup
+  investidor
+}
+
+enum interesse_iniciado_por {
+  startup
+  investidor
+}
+
+enum match_conexao_status {
+  ativo
+  inativo
+}
+
+enum interesse_status {
+  pendente
+  aceito
+  recusado
+}
+
+enum usuario_tipo_usuario {
+  startup
+  investidor
+  admin
+}
+
+enum match_conexao_origem {
+  organico
+  recomendacao_sistema
+  evento
+}
+
+enum startup_estagio {
+  ideacao
+  validacao
+  tracao
+  escala
+}
+
+enum usuario_status {
+  ativo
+  inativo
+  suspenso
+}
