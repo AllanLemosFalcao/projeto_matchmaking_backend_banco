@@ -18,7 +18,7 @@ import type {
   ResumoAtividade,
 } from '../types'
 
-export const API_URL = import.meta.env.VITE_API_URL ?? ''
+export const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:3000/api'
 
 // Helper para quando a API real estiver disponível.
 export async function http<T>(path: string, init?: RequestInit): Promise<T> {
@@ -31,7 +31,13 @@ export async function http<T>(path: string, init?: RequestInit): Promise<T> {
       ...init?.headers,
     },
   })
-  if (!res.ok) throw new Error(`Erro ${res.status} em ${path}`)
+  
+  if (!res.ok) {
+    // Tenta extrair a mensagem de erro exata que nosso authController.ts enviou
+    const erroJson = await res.json().catch(() => ({}));
+    throw new Error(erroJson.error || `Erro ${res.status} em ${path}`);
+  }
+  
   return res.json() as Promise<T>
 }
 
@@ -41,24 +47,35 @@ const perfilPorId = (id: string) => db.perfis.find((p) => p.id === id)
 
 // ---------- Autenticação ----------
 
+// Nova função de login apontando para o seu Back-end real
 export async function login(email: string, senha: string): Promise<Perfil> {
-  await esperar()
-  const perfil = db.perfis.find((p) => p.email.toLowerCase() === email.toLowerCase())
-  if (!perfil || !senha) throw new Error('E-mail ou senha inválidos')
-  return perfil
+  const resposta = await http<{ token: string } & Perfil>('/auth/login', {
+    method: 'POST',
+    body: JSON.stringify({ email, senha }),
+  });
+
+  // Salva o token JWT localmente para as próximas requisições
+  if (resposta.token) {
+    localStorage.setItem('token', resposta.token);
+  }
+
+  // Devolve o perfil para o AuthContext entrar no Dashboard
+  return resposta;
 }
 
 export async function cadastrar(dados: DadosCadastro): Promise<Perfil> {
-  await esperar()
-  if (db.perfis.some((p) => p.email.toLowerCase() === dados.email.toLowerCase())) {
-    throw new Error('Este e-mail já está cadastrado')
+  // A validação de e-mail duplicado e a criação de ID agora acontecem no back-end.
+  const resposta = await http<{ token: string } & Perfil>('/auth/register', {
+    method: 'POST',
+    body: JSON.stringify(dados),
+  });
+
+  // Salva o token JWT retornado pelo back-end no navegador para manter o usuário logado
+  if (resposta.token) {
+    localStorage.setItem('token', resposta.token);
   }
-  // O mock não guarda senha (qualquer senha entra); a API real vai validar.
-  const perfil: Perfil & { senha?: string } = { ...dados, id: novoId() }
-  delete perfil.senha
-  db.perfis.push(perfil)
-  salvarDb()
-  return perfil
+
+  return resposta;
 }
 
 export async function atualizarPerfil(perfil: Perfil): Promise<Perfil> {
@@ -73,24 +90,10 @@ export async function atualizarPerfil(perfil: Perfil): Promise<Perfil> {
 
 /** Investidores buscam startups e vice-versa. */
 export async function buscar(usuario: Perfil, filtros: FiltrosBusca): Promise<Perfil[]> {
-  await esperar()
-  const texto = filtros.texto.trim().toLowerCase()
-  const alvo = usuario.papel === 'investidor' ? 'startup' : 'investidor'
-
-  return db.perfis.filter((p) => {
-    if (p.papel !== alvo) return false
-    if (filtros.localizacao && p.localizacao !== filtros.localizacao) return false
-    if (p.papel === 'startup') {
-      if (filtros.segmento && p.segmento !== filtros.segmento) return false
-      if (filtros.estagio && p.estagio !== filtros.estagio) return false
-      if (texto && !`${p.nome} ${p.descricao}`.toLowerCase().includes(texto)) return false
-    } else {
-      if (filtros.segmento && !p.segmentosInteresse.includes(filtros.segmento as never)) return false
-      if (filtros.estagio && !p.estagiosPreferidos.includes(filtros.estagio as never)) return false
-      if (texto && !`${p.nome} ${p.tese}`.toLowerCase().includes(texto)) return false
-    }
-    return true
-  })
+  return await http<Perfil[]>('/buscar', {
+    method: 'POST',
+    body: JSON.stringify(filtros),
+  });
 }
 
 /** Localizações existentes, para o filtro "Todos os locais". */
@@ -102,76 +105,87 @@ export async function listarLocalizacoes(papel: Perfil['papel']): Promise<string
 
 /** Recomendações simples por afinidade de segmento/estágio/valor. */
 export async function recomendacoes(usuario: Perfil, limite = 4): Promise<Perfil[]> {
-  await esperar()
-  const pontuar = (inv: PerfilInvestidor, st: PerfilStartup) =>
-    Number(inv.segmentosInteresse.includes(st.segmento)) * 2 +
-    Number(inv.estagiosPreferidos.includes(st.estagio)) +
-    Number(st.valorInvestimento >= inv.investimentoMinimo && st.valorInvestimento <= inv.investimentoMaximo)
-
-  const candidatos = db.perfis
-    .filter((p) => p.papel !== usuario.papel)
-    .map((p) => ({
-      perfil: p,
-      pontos:
-        usuario.papel === 'investidor'
-          ? pontuar(usuario, p as PerfilStartup)
-          : pontuar(p as PerfilInvestidor, usuario),
-    }))
-    .filter((c) => c.pontos > 0)
-    .sort((a, b) => b.pontos - a.pontos)
-
-  return candidatos.slice(0, limite).map((c) => c.perfil)
+  try {
+    // Reaproveita a nossa rota de busca real enviando filtros vazios
+    const resultados = await buscar(usuario, { texto: '' });
+    
+    // Retorna apenas a quantidade solicitada pelo limite (ex: os 4 primeiros)
+    return resultados.slice(0, limite);
+  } catch (error) {
+    console.error("Erro ao buscar recomendações:", error);
+    return [];
+  }
 }
 
 // ---------- Interesses e matches ----------
 
 /** Registra interesse. Se o outro lado já tinha registrado, cria e retorna o match. */
 export async function registrarInteresse(deId: string, paraId: string): Promise<Match | null> {
-  await esperar(150)
-  if (!db.interesses.some((i) => i.deId === deId && i.paraId === paraId)) {
-    db.interesses.push({ deId, paraId, criadoEm: new Date().toISOString() })
+  const usuarioStr = localStorage.getItem('usuario');
+  if (!usuarioStr) return null;
+  
+  const usuario = JSON.parse(usuarioStr);
+  
+  const id_startup = usuario.papel === 'startup' ? deId : paraId;
+  const id_investidor = usuario.papel === 'investidor' ? deId : paraId;
+  
+  try {
+    await http('/match/interesse', {
+      method: 'POST',
+      body: JSON.stringify({
+        id_startup: id_startup,
+        id_investidor: id_investidor,
+        iniciado_por: usuario.papel,
+        mensagem: 'Olá! Vi seu perfil na plataforma e gostaria de conectar.'
+      })
+    });
+    
+    return null;
+    
+  } catch (error) {
+    // Se o backend devolver erro (como "já registrado"), tentamos forçar o Match definitivo!
+    console.log("Possível interesse mútuo detectado. Tentando gerar match...");
+    const matchRealizado = await aceitarPendente(paraId);
+    return matchRealizado;
   }
-  let match: Match | null = null
-  const reciproco = db.interesses.some((i) => i.deId === paraId && i.paraId === deId)
-  if (reciproco && !db.matches.some((m) => m.usuarios.includes(deId) && m.usuarios.includes(paraId))) {
-    match = { id: novoId(), usuarios: [deId, paraId], criadoEm: new Date().toISOString() }
-    db.matches.push(match)
+}
+
+/** Nova função: Aceita um interesse pendente e gera o Match no Back-end */
+export async function aceitarPendente(alvoId: string): Promise<Match | null> {
+  try {
+     const resposta = await http<{ match: Match }>('/match/aceitar', {
+        method: 'POST',
+        body: JSON.stringify({ alvoId })
+     });
+     return resposta.match;
+  } catch(e) {
+     console.error("Erro ao aceitar match", e);
+     return null;
   }
-  salvarDb()
-  return match
 }
 
 /** IDs em quem o usuário já registrou interesse. */
 export async function interessesEnviados(usuarioId: string): Promise<string[]> {
-  await esperar(50)
-  return db.interesses.filter((i) => i.deId === usuarioId).map((i) => i.paraId)
+  // O Front-end usava isso para não mostrar o botão em quem já demos like.
+  // Temporariamente retornamos vazio. Numa futura melhoria, podemos criar a rota GET /match/enviados.
+  return [];
 }
 
 /** Perfis que registraram interesse no usuário e ainda não viraram match. */
 export async function interessesPendentes(usuarioId: string): Promise<Perfil[]> {
-  await esperar(100)
-  const enviados = new Set(db.interesses.filter((i) => i.deId === usuarioId).map((i) => i.paraId))
-  return db.interesses
-    .filter((i) => i.paraId === usuarioId && !enviados.has(i.deId))
-    .map((i) => perfilPorId(i.deId))
-    .filter((p): p is Perfil => !!p)
+  // Chama a nova rota protegida do back-end
+  return await http<Perfil[]>('/match/pendentes', { method: 'GET' });
 }
-
 export async function resumoAtividade(usuarioId: string): Promise<ResumoAtividade> {
-  await esperar(100)
-  return {
-    interessesEnviados: db.interesses.filter((i) => i.deId === usuarioId).length,
-    interessesRecebidos: db.interesses.filter((i) => i.paraId === usuarioId).length,
-    matches: db.matches.filter((m) => m.usuarios.includes(usuarioId)).length,
-  }
+  // Chama a nossa rota real do back-end para trazer as contagens do Dashboard
+  return await http<ResumoAtividade>('/dashboard', {
+    method: 'GET'
+  });
 }
 
 export async function listarMatches(usuarioId: string): Promise<Array<{ match: Match; outro: Perfil }>> {
-  await esperar()
-  return db.matches
-    .filter((m) => m.usuarios.includes(usuarioId))
-    .sort((a, b) => b.criadoEm.localeCompare(a.criadoEm))
-    .map((match) => ({ match, outro: perfilPorId(match.usuarios.find((id) => id !== usuarioId)!)! }))
+  // Retorna vazio temporariamente até criarmos a rota de listar os perfis dos matches no back-end
+  return [];
 }
 
 // ---------- Conversas ----------
