@@ -1,13 +1,32 @@
 import { Request, Response } from 'express';
-import { PrismaClient, TipoUsuario } from '@prisma/client';
+import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
+import { randomUUID } from 'crypto'; // Gerador nativo de IDs do Node.js
 
 const prisma = new PrismaClient();
 
+const mapearEstagio = (estagioFront: string) => {
+    const mapa: Record<string, string> = {
+        'Ideação': 'ideacao',
+        'Validação': 'validacao',
+        'MVP': 'validacao',
+        'Tração inicial': 'tracao',
+        'Crescimento / Scale': 'escala'
+    };
+    return mapa[estagioFront] || 'ideacao';
+};
+
+// ==========================================
+// 1. FUNÇÃO DE CADASTRO (REGISTER)
+// ==========================================
 export const register = async (req: Request, res: Response) => {
     try {
-        const { nome, email, senha, tipo_usuario } = req.body;
+        const {
+            papel, nome, email, senha, localizacao, foto,
+            descricao, segmento, estagio, composicaoEquipe, mercado, modeloNegocio, valorInvestimento, participacaoOferecida,
+            tese, segmentosInteresse, estagiosPreferidos, investimentoMinimo, investimentoMaximo
+        } = req.body;
 
         const existingUser = await prisma.usuario.findUnique({ where: { email } });
         if (existingUser) {
@@ -15,27 +34,92 @@ export const register = async (req: Request, res: Response) => {
         }
 
         const senha_hash = await bcrypt.hash(senha, 10);
+        
+        // Gera o ID do usuário antecipadamente para usar nas tabelas dependentes
+        const userId = randomUUID();
 
-        const usuario = await prisma.usuario.create({
-            data: {
-                nome,
-                email,
-                senha_hash,
-                tipo_usuario: tipo_usuario as TipoUsuario // Tipagem estrita
+        const novoUsuario = await prisma.$transaction(async (tx) => {
+            
+            const usuario = await tx.usuario.create({
+                data: {
+                    id_usuario: userId, // ID gerado manualmente
+                    nome,
+                    email,
+                    senha_hash,
+                    tipo_usuario: papel as any, // Ignora a tipagem estrita do Prisma para o Enum
+                    foto_url: foto || null, 
+                }
+            });
+
+            if (papel === 'startup') {
+                await tx.startup.create({
+                    data: {
+                        id_startup: randomUUID(), // ID gerado manualmente
+                        id_usuario: userId,
+                        nome_fantasia: nome, 
+                        cidade: localizacao,
+                        descricao: descricao,
+                        estagio: mapearEstagio(estagio) as any, 
+                        investimento_pretendido: valorInvestimento,
+                        composicao_equipe: composicaoEquipe,
+                        mercado: mercado,
+                        modelo_negocio: modeloNegocio,
+                        participacao_oferecida: participacaoOferecida
+                    }
+                });
+
+            } else if (papel === 'investidor') {
+                await tx.investidor.create({
+                    data: {
+                        id_investidor: randomUUID(), // ID gerado manualmente
+                        id_usuario: userId,
+                        cidade: localizacao,
+                        tese_investimento: tese,
+                        faixa_minima: investimentoMinimo,
+                        faixa_maxima: investimentoMaximo,
+                        tipo_investidor: 'outro' 
+                    }
+                });
             }
+
+            return usuario;
         });
 
-        res.status(201).json({ message: 'Usuário criado com sucesso', id_usuario: usuario.id_usuario });
+        const token = jwt.sign(
+            { id: novoUsuario.id_usuario, tipo: novoUsuario.tipo_usuario },
+            process.env.JWT_SECRET || 'secret_padrao',
+            { expiresIn: '1d' }
+        );
+
+        res.status(201).json({
+            id: novoUsuario.id_usuario,
+            nome: novoUsuario.nome,
+            email: novoUsuario.email,
+            papel: novoUsuario.tipo_usuario,
+            token
+        });
+
     } catch (error) {
-        res.status(500).json({ error: 'Erro ao criar usuário' });
+        console.error("Erro no cadastro:", error);
+        res.status(500).json({ error: 'Erro interno ao processar o cadastro.' });
     }
 };
 
+// ==========================================
+// 2. FUNÇÃO DE LOGIN (LOGIN)
+// ==========================================
 export const login = async (req: Request, res: Response) => {
     try {
         const { email, senha } = req.body;
 
-        const usuario = await prisma.usuario.findUnique({ where: { email } });
+        const usuario = await prisma.usuario.findUnique({ 
+            where: { email },
+            include: {
+                startup: true, 
+                investidor: true 
+            }
+        });
+        
         if (!usuario) {
             return res.status(404).json({ error: 'Usuário não encontrado.' });
         }
@@ -45,15 +129,43 @@ export const login = async (req: Request, res: Response) => {
             return res.status(401).json({ error: 'Senha incorreta.' });
         }
 
-        // Gera o Token JWT
         const token = jwt.sign(
             { id: usuario.id_usuario, tipo: usuario.tipo_usuario },
             process.env.JWT_SECRET || 'secret_padrao',
             { expiresIn: '1d' }
         );
 
-        res.json({ message: 'Login efetuado com sucesso', token, tipo_usuario: usuario.tipo_usuario });
+        let perfilBase = {
+            id: usuario.id_usuario,
+            nome: usuario.nome,
+            email: usuario.email,
+            papel: usuario.tipo_usuario,
+            token, 
+        };
+
+        if (usuario.tipo_usuario === 'startup' && usuario.startup) {
+            Object.assign(perfilBase, {
+                localizacao: usuario.startup.cidade,
+                descricao: usuario.startup.descricao,
+                estagio: usuario.startup.estagio,
+                valorInvestimento: Number(usuario.startup.investimento_pretendido),
+                composicaoEquipe: usuario.startup.composicao_equipe,
+                mercado: usuario.startup.mercado,
+                modeloNegocio: usuario.startup.modelo_negocio,
+                participacaoOferecida: Number(usuario.startup.participacao_oferecida)
+            });
+        } else if (usuario.tipo_usuario === 'investidor' && usuario.investidor) {
+            Object.assign(perfilBase, {
+                localizacao: usuario.investidor.cidade,
+                tese: usuario.investidor.tese_investimento,
+                investimentoMinimo: Number(usuario.investidor.faixa_minima),
+                investimentoMaximo: Number(usuario.investidor.faixa_maxima),
+            });
+        }
+
+        res.json(perfilBase);
     } catch (error) {
+        console.error("Erro no login:", error);
         res.status(500).json({ error: 'Erro ao fazer login' });
     }
 };

@@ -1,3 +1,5 @@
+
+
 -- Criação do banco de dados para a Plataforma SaaS de Matchmaking
 CREATE DATABASE IF NOT EXISTS plataforma_matchmaking;
 USE plataforma_matchmaking;
@@ -10,7 +12,9 @@ CREATE TABLE USUARIO (
     senha_hash VARCHAR(255) NOT NULL,
     tipo_usuario ENUM('startup', 'investidor', 'admin') NOT NULL,
     status ENUM('ativo', 'inativo', 'suspenso') DEFAULT 'ativo',
+    foto_url TEXT NULL,
     criado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    
 );
 
 -- 2. Tabela: CONSENTIMENTO_LGPD
@@ -42,6 +46,10 @@ CREATE TABLE STARTUP (
     investimento_pretendido DECIMAL(15, 2),
     cidade VARCHAR(100),
     uf CHAR(2),
+    composicao_equipe VARCHAR(255),
+	mercado VARCHAR(255),
+	modelo_negocio VARCHAR(255),
+	participacao_oferecida DECIMAL(5,2),
     FOREIGN KEY (id_usuario) REFERENCES USUARIO(id_usuario) ON DELETE CASCADE
 );
 
@@ -152,4 +160,21 @@ CREATE TABLE AVALIACAO_BETA (
     comentario TEXT,
     criada_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (id_usuario) REFERENCES USUARIO(id_usuario) ON DELETE CASCADE
+);
+
+CREATE TABLE INVESTIDOR_ESTAGIO (
+    id_investidor CHAR(36) NOT NULL,
+    estagio ENUM('ideacao', 'validacao', 'MVP', 'tracao inicial', 'crescimento / scale') NOT NULL,
+    criado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (id_investidor, estagio),
+    FOREIGN KEY (id_investidor) REFERENCES INVESTIDOR(id_investidor) ON DELETE CASCADE
+);
+
+CREATE TABLE MATCHES (
+    id_match CHAR(36) PRIMARY KEY,
+    id_startup CHAR(36) NOT NULL,
+    id_investidor CHAR(36) NOT NULL,
+    data_match DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (id_startup) REFERENCES STARTUP(id_startup),
+    FOREIGN KEY (id_investidor) REFERENCES INVESTIDOR(id_investidor)
 );

@@ -1,6 +1,8 @@
 import { Router } from 'express';
 import { register, login } from '../controllers/authController';
-import { criarInteresse } from '../controllers/matchController';
+import { buscarPerfis } from '../controllers/buscaController';
+import { obterDashboard } from '../controllers/dashboardController';
+import { criarInteresse, interessesPendentes, aceitarMatch } from '../controllers/matchController';
 import { authMiddleware } from '../middlewares/authMiddleware';
 
 const router = Router();
@@ -9,7 +11,13 @@ const router = Router();
 router.post('/auth/register', register);
 router.post('/auth/login', login);
 
-// Rotas Privadas (Protegidas pelo middleware)
+// Rotas Privadas
+router.post('/buscar', authMiddleware, buscarPerfis);
+router.get('/dashboard', authMiddleware, obterDashboard);
+
+// Rotas de Matchmaking
 router.post('/match/interesse', authMiddleware, criarInteresse);
+router.get('/match/pendentes', authMiddleware, interessesPendentes);
+router.post('/match/aceitar', authMiddleware, aceitarMatch);
 
 export default router;
