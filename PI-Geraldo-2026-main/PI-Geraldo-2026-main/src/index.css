@@ -1,0 +1,43 @@
+@import 'tailwindcss';
+
+@theme {
+  --font-sans: 'Google Sans Flex Variable', 'Google Sans Flex', system-ui, sans-serif;
+
+  --color-fundo: #212226;
+  --color-superficie: #2a2b30;
+  --color-borda: #4a4b52;
+  --color-suave: #a3a3ab;
+  --color-rosa: #f72c7b;
+  --color-rosa-escuro: #d81f66;
+  --color-lima: #bbf320;
+  --color-lima-escuro: #a3d915;
+}
+
+/* Cor de destaque por perfil: investidor = rosa, startup = lima */
+:root,
+[data-papel='investidor'] {
+  --acento: var(--color-rosa);
+  --acento-hover: var(--color-rosa-escuro);
+}
+[data-papel='startup'] {
+  --acento: var(--color-lima);
+  --acento-hover: var(--color-lima-escuro);
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  @apply bg-fundo font-sans text-white antialiased;
+  color-scheme: dark;
+}
+
+/* Títulos com o eixo de arredondamento da Google Sans Flex */
+.titulo {
+  font-weight: 800;
+  font-variation-settings: 'ROND' 100;
+  letter-spacing: -0.01em;
+}
