@@ -169,12 +169,3 @@ CREATE TABLE INVESTIDOR_ESTAGIO (
     PRIMARY KEY (id_investidor, estagio),
     FOREIGN KEY (id_investidor) REFERENCES INVESTIDOR(id_investidor) ON DELETE CASCADE
 );
-
-CREATE TABLE MATCHES (
-    id_match CHAR(36) PRIMARY KEY,
-    id_startup CHAR(36) NOT NULL,
-    id_investidor CHAR(36) NOT NULL,
-    data_match DATETIME DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (id_startup) REFERENCES STARTUP(id_startup),
-    FOREIGN KEY (id_investidor) REFERENCES INVESTIDOR(id_investidor)
-);

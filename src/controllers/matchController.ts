@@ -87,6 +87,8 @@ export const interessesPendentes = async (req: AuthRequest, res: Response) => {
                 tese: p.investidor.tese_investimento,
                 investimentoMinimo: Number(p.investidor.faixa_minima),
                 investimentoMaximo: Number(p.investidor.faixa_maxima),
+                segmentosInteresse: ['Outro'], 
+                estagiosPreferidos: []
             }));
             return res.json(perfis);
         } 
@@ -150,12 +152,25 @@ export const aceitarMatch = async (req: AuthRequest, res: Response) => {
 
         if(!id_startup || !id_investidor) return res.status(400).json({error: "Erro de mapeamento de IDs"});
 
-        // Usa prisma.matches.create corretamente (com a tabela que você acabou de criar no MySQL)
-        const novoMatch = await prisma.matches.create({
+        const novoMatchId = randomUUID();
+        const novaConversaId = randomUUID();
+
+        // 1. Cria o Match
+        const novoMatch = await prisma.match_conexao.create({
+    data: {
+        id_match: novoMatchId,
+        id_startup: id_startup,
+        id_investidor: id_investidor
+    }
+});
+
+        // 2. Cria a Conversa e CONECTA ao Match existente usando a relação do Prisma
+        await prisma.conversa.create({
             data: {
-                id_match: randomUUID(),
-                id_startup: id_startup,
-                id_investidor: id_investidor
+                id_conversa: novaConversaId,
+                match_conexao: { 
+                    connect: { id_match: novoMatchId } 
+                }
             }
         });
 
@@ -163,5 +178,86 @@ export const aceitarMatch = async (req: AuthRequest, res: Response) => {
     } catch (error) {
         console.error("Erro ao aceitar match:", error);
         res.status(500).json({ error: 'Erro interno ao processar match' });
+    }
+};
+
+// ==========================================
+// LISTAR MATCHES CONFIRMADOS
+// ==========================================
+export const listarMatches = async (req: AuthRequest, res: Response) => {
+    try {
+        if (!req.usuarioId) return res.status(401).json({ error: 'Não autorizado' });
+
+        const usuarioLogado = await prisma.usuario.findUnique({
+            where: { id_usuario: req.usuarioId },
+            include: { startup: true, investidor: true }
+        });
+
+        if (!usuarioLogado) return res.status(404).json({ error: 'Usuário não encontrado' });
+
+        let matchesRaw = [];
+
+        if (usuarioLogado.tipo_usuario === 'startup' && usuarioLogado.startup) {
+            matchesRaw = await prisma.match_conexao.findMany({ // <- Mude de matches para match_conexao
+    where: { id_startup: usuarioLogado.startup.id_startup },
+    include: { investidor: { include: { usuario: true } } }
+});
+
+            const formatado = matchesRaw.map(m => ({
+                match: { 
+                    id: m.id_match, 
+                    usuarios: [usuarioLogado.id_usuario, m.investidor.id_usuario], 
+                    criadoEm: (m.data_match || new Date()).toISOString() 
+                },
+                outro: {
+                    id: m.investidor.id_usuario,
+                    nome: m.investidor.usuario.nome,
+                    email: m.investidor.usuario.email,
+                    papel: 'investidor',
+                    foto: m.investidor.usuario.foto_url,
+                    localizacao: m.investidor.cidade,
+                    tese: m.investidor.tese_investimento,
+                    investimentoMinimo: Number(m.investidor.faixa_minima),
+                    investimentoMaximo: Number(m.investidor.faixa_maxima),
+                    segmentosInteresse: ['Outro'], 
+                    estagiosPreferidos: []         
+                } // <-- A chave que faltava fechar!
+            }));
+            return res.json(formatado);
+        } 
+        else if (usuarioLogado.tipo_usuario === 'investidor' && usuarioLogado.investidor) {
+            matchesRaw = await prisma.match_conexao.findMany({ // <- Mude de matches para match_conexao
+    where: { id_investidor: usuarioLogado.investidor.id_investidor },
+    include: { startup: { include: { usuario: true } } }
+});
+
+            const formatado = matchesRaw.map(m => ({
+                match: { 
+                    id: m.id_match, 
+                    usuarios: [usuarioLogado.id_usuario, m.startup.id_usuario], 
+                    criadoEm: (m.data_match || new Date()).toISOString() 
+                },
+                outro: {
+                    id: m.startup.id_usuario,
+                    nome: m.startup.usuario.nome,
+                    email: m.startup.usuario.email,
+                    papel: 'startup',
+                    foto: m.startup.usuario.foto_url,
+                    localizacao: m.startup.cidade,
+                    descricao: m.startup.descricao,
+                    estagio: m.startup.estagio,
+                    valorInvestimento: Number(m.startup.investimento_pretendido),
+                    participacaoOferecida: Number(m.startup.participacao_oferecida),
+                    segmentosInteresse: [], 
+                    estagiosPreferidos: []
+                }
+            }));
+            return res.json(formatado);
+        }
+
+        res.json([]);
+    } catch (error) {
+        console.error("Erro ao listar matches:", error);
+        res.status(500).json({ error: 'Erro interno ao listar matches' });
     }
 };

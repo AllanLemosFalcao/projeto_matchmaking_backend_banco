@@ -184,21 +184,32 @@ export async function resumoAtividade(usuarioId: string): Promise<ResumoAtividad
 }
 
 export async function listarMatches(usuarioId: string): Promise<Array<{ match: Match; outro: Perfil }>> {
-  // Retorna vazio temporariamente até criarmos a rota de listar os perfis dos matches no back-end
-  return [];
+  try {
+    return await http<Array<{ match: Match; outro: Perfil }>>('/match/listar', {
+      method: 'GET'
+    });
+  } catch (error) {
+    console.error("Erro ao listar matches:", error);
+    return [];
+  }
 }
 
 // ---------- Conversas ----------
 
+// ---------- Conversas ----------
+
 export async function listarMensagens(matchId: string): Promise<Mensagem[]> {
-  await esperar(100)
-  return db.mensagens.filter((m) => m.matchId === matchId)
+  try {
+    return await http<Mensagem[]>(`/mensagens/${matchId}`, { method: 'GET' });
+  } catch (error) {
+    console.error("Erro ao carregar mensagens:", error);
+    return [];
+  }
 }
 
 export async function enviarMensagem(matchId: string, autorId: string, texto: string): Promise<Mensagem> {
-  await esperar(100)
-  const msg: Mensagem = { id: novoId(), matchId, autorId, texto, enviadaEm: new Date().toISOString() }
-  db.mensagens.push(msg)
-  salvarDb()
-  return msg
+  return await http<Mensagem>('/mensagens', {
+    method: 'POST',
+    body: JSON.stringify({ matchId, texto })
+  });
 }
