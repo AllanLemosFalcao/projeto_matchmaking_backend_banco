@@ -8,7 +8,7 @@ import { useAuth } from '../contexts/auth'
 import * as api from '../services/api'
 import type { FiltrosBusca, Perfil } from '../types'
 import { formatarReais } from '../utils/formatar'
-import { destaque } from '../utils/perfil'
+import { destaque, compatibilidadeVisual } from '../utils/perfil'
 
 const filtroClasses =
   'w-full min-w-0 rounded-xl border border-borda bg-transparent px-3 py-3 text-sm text-white outline-none focus:border-(--acento) sm:px-5 sm:py-4 sm:text-base'
@@ -31,9 +31,9 @@ function Filtro({
       onChange={(e) => onChange(e.target.value)}
       className={`${filtroClasses} appearance-none bg-fundo`}
     >
-      <option value="">{todos}</option>
+      <option value="" className="bg-zinc-900 text-white">{todos}</option>
       {opcoes.map((o) => (
-        <option key={o}>{o}</option>
+        <option key={o} className="bg-zinc-900 text-white">{o}</option>
       ))}
     </select>
   )
@@ -121,7 +121,16 @@ export function Buscar() {
           const matchId = matches[p.id]
           return (
             <Cartao key={p.id} className="flex flex-col gap-6 p-6 sm:flex-row sm:p-11">
-              <FotoPerfil perfil={p} tamanho="md" />
+              
+              {/* Foto de perfil clicável direcionando para a página do perfil */}
+              <button 
+                type="button"
+                onClick={() => navigate(`/perfil/${p.id}`)}
+                className="shrink-0 transition hover:opacity-80 focus:outline-none"
+                aria-label={`Ver perfil de ${p.nome}`}
+              >
+                <FotoPerfil perfil={p} tamanho="md" />
+              </button>
 
               <div className="min-w-0 flex-1 space-y-4">
                 <h2 className="text-2xl font-semibold">{p.nome}</h2>
@@ -144,21 +153,40 @@ export function Buscar() {
                 </p>
               </div>
 
-              <div className="flex flex-row-reverse items-center justify-between gap-4 sm:flex-col sm:items-end sm:justify-start">
-                {p.papel === 'startup' && <Selo>{destaque(p)}</Selo>}
-                {matchId ? (
-                  <Botao variante="branco" onClick={() => navigate(`/conversas/${matchId}`)}>
-                    Ir para conversa
+              {/* === COLUNA DA DIREITA (SELOS E BOTÕES) === */}
+              <div className="flex flex-col items-end justify-start gap-4 mt-4 sm:mt-0 w-full sm:w-auto">
+                
+                {/* Linha dos Selos (Match e Equity/Ticket) */}
+                <div className="flex flex-wrap justify-end gap-2">
+                  {p.score !== undefined && compatibilidadeVisual(p.score) && (
+                    <span className="px-3 py-1 rounded-full bg-white/10 text-white text-sm font-medium border border-white/20 shadow-lg">
+                      {compatibilidadeVisual(p.score)}
+                    </span>
+                  )}
+                  {p.papel === 'startup' && <Selo>{destaque(p)}</Selo>}
+                </div>
+                
+                {/* Linha dos Botões */}
+                <div className="flex flex-col gap-3 w-full sm:w-auto mt-auto">
+                  <Botao variante="contorno" onClick={() => navigate(`/perfil/${p.id}`)}>
+                    Ver perfil
                   </Botao>
-                ) : enviados.has(p.id) ? (
-                  <Botao variante="contorno" disabled>
-                    Interesse registrado
-                  </Botao>
-                ) : (
-                  <Botao variante={buscaStartups ? 'rosa' : 'acento'} onClick={() => registrar(p)}>
-                    Registrar interesse
-                  </Botao>
-                )}
+                  
+                  {matchId ? (
+                    <Botao variante="branco" onClick={() => navigate(`/conversas/${matchId}`)}>
+                      Ir para conversa
+                    </Botao>
+                  ) : enviados.has(p.id) ? (
+                    <Botao variante="contorno" disabled>
+                      Interesse registrado
+                    </Botao>
+                  ) : (
+                    <Botao variante={buscaStartups ? 'rosa' : 'acento'} onClick={() => registrar(p)}>
+                      Registrar interesse
+                    </Botao>
+                  )}
+                </div>
+
               </div>
             </Cartao>
           )

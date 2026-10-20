@@ -17,31 +17,38 @@ export const obterDashboard = async (req: AuthRequest, res: Response) => {
 
         let enviados = 0;
         let recebidos = 0;
+        let matchesAtivos = 0;
 
-        // Conta as estatísticas se for Startup
         if (usuario.tipo_usuario === 'startup' && usuario.startup) {
+            // Todos que a startup enviou (histórico de esforço)
             enviados = await prisma.interesse.count({
                 where: { id_startup: usuario.startup.id_startup, iniciado_por: 'startup' }
             });
+            // Apenas os pendentes aguardando resposta da startup
             recebidos = await prisma.interesse.count({
-                where: { id_startup: usuario.startup.id_startup, iniciado_por: 'investidor' }
+                where: { id_startup: usuario.startup.id_startup, iniciado_por: 'investidor', status: 'pendente' }
+            });
+            // Conta os matches reais na tabela match_conexao
+            matchesAtivos = await prisma.match_conexao.count({
+                where: { id_startup: usuario.startup.id_startup, status: 'ativo' }
             });
         } 
-        // Conta as estatísticas se for Investidor
         else if (usuario.tipo_usuario === 'investidor' && usuario.investidor) {
             enviados = await prisma.interesse.count({
                 where: { id_investidor: usuario.investidor.id_investidor, iniciado_por: 'investidor' }
             });
             recebidos = await prisma.interesse.count({
-                where: { id_investidor: usuario.investidor.id_investidor, iniciado_por: 'startup' }
+                where: { id_investidor: usuario.investidor.id_investidor, iniciado_por: 'startup', status: 'pendente' }
+            });
+            matchesAtivos = await prisma.match_conexao.count({
+                where: { id_investidor: usuario.investidor.id_investidor, status: 'ativo' }
             });
         }
 
-        // Retorna os dados prontos para o front-end
         res.json({
             interessesEnviados: enviados,
             interessesRecebidos: recebidos,
-            matches: 0
+            matches: matchesAtivos
         });
 
     } catch (error) {

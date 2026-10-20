@@ -12,6 +12,7 @@ interface UsuarioBase {
   /** URL ou data URL da foto/logo */
   foto?: string
   localizacao: string
+  score?: number 
 }
 
 export interface PerfilStartup extends UsuarioBase {
@@ -41,7 +42,10 @@ export type Perfil = PerfilStartup | PerfilInvestidor
 
 /** Distributes Omit over the union so each variant keeps its own fields. */
 type SemId<T> = T extends unknown ? Omit<T, 'id'> : never
-export type DadosCadastro = SemId<Perfil> & { senha: string }
+export type DadosCadastro = SemId<Perfil> & { 
+  senha: string
+  aceiteTermos?: boolean 
+}
 
 /** "deId registrou interesse em paraId". Interesse mútuo = match. */
 export interface Interesse {

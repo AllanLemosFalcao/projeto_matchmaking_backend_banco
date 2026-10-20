@@ -123,32 +123,32 @@ export function CamposInvestidor({
         label="Tese de investimento"
         placeholder="O que você busca em uma startup?"
         required
-        value={dados.tese}
+        value={dados.tese || ''}
         onChange={(e) => mudar({ tese: e.target.value })}
       />
       <Chips
         label="Segmentos de interesse"
         opcoes={SEGMENTOS}
-        selecionados={dados.segmentosInteresse}
+        selecionados={dados.segmentosInteresse || []} // Fallback de segurança adicionado aqui
         onChange={(v) => mudar({ segmentosInteresse: v })}
       />
       <Chips
         label="Estágios preferidos"
         opcoes={ESTAGIOS}
-        selecionados={dados.estagiosPreferidos}
+        selecionados={dados.estagiosPreferidos || []} // Fallback de segurança adicionado aqui
         onChange={(v) => mudar({ estagiosPreferidos: v })}
       />
       <div className="grid grid-cols-2 gap-4">
         <CampoMoeda
           label="Investimento mínimo (R$)"
           placeholder="Ex.: R$ 50.000"
-          valor={dados.investimentoMinimo}
+          valor={dados.investimentoMinimo || 0}
           onValor={(v) => mudar({ investimentoMinimo: v })}
         />
         <CampoMoeda
           label="Investimento máximo (R$)"
           placeholder="Ex.: R$ 500.000"
-          valor={dados.investimentoMaximo}
+          valor={dados.investimentoMaximo || 0}
           onValor={(v) => mudar({ investimentoMaximo: v })}
         />
       </div>
@@ -156,7 +156,7 @@ export function CamposInvestidor({
         label="Localização"
         placeholder="Ex.: Porto Digital"
         required
-        value={dados.localizacao}
+        value={dados.localizacao || ''}
         onChange={(e) => mudar({ localizacao: e.target.value })}
       />
     </>

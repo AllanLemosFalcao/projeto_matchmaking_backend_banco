@@ -70,7 +70,8 @@ export const interessesPendentes = async (req: AuthRequest, res: Response) => {
             pendentesRaw = await prisma.interesse.findMany({
                 where: { 
                     id_startup: usuarioLogado.startup.id_startup, 
-                    iniciado_por: 'investidor' 
+                    iniciado_por: 'investidor',
+                    status: 'pendente' 
                 },
                 include: { 
                     investidor: { include: { usuario: true } } 
@@ -97,7 +98,8 @@ export const interessesPendentes = async (req: AuthRequest, res: Response) => {
             pendentesRaw = await prisma.interesse.findMany({
                 where: { 
                     id_investidor: usuarioLogado.investidor.id_investidor, 
-                    iniciado_por: 'startup' 
+                    iniciado_por: 'startup',
+                    status: 'pendente'
                 },
                 include: { 
                     startup: { include: { usuario: true } } 
@@ -152,29 +154,59 @@ export const aceitarMatch = async (req: AuthRequest, res: Response) => {
 
         if(!id_startup || !id_investidor) return res.status(400).json({error: "Erro de mapeamento de IDs"});
 
-        const novoMatchId = randomUUID();
-        const novaConversaId = randomUUID();
-
-        // 1. Cria o Match
-        const novoMatch = await prisma.match_conexao.create({
-    data: {
-        id_match: novoMatchId,
-        id_startup: id_startup,
-        id_investidor: id_investidor
-    }
-});
-
-        // 2. Cria a Conversa e CONECTA ao Match existente usando a relação do Prisma
-        await prisma.conversa.create({
-            data: {
-                id_conversa: novaConversaId,
-                match_conexao: { 
-                    connect: { id_match: novoMatchId } 
-                }
-            }
+        // 1. ATUALIZA O STATUS DO INTERESSE PARA 'ACEITO' (Isso remove a notificação do sino)
+        await prisma.interesse.updateMany({
+            where: {
+                id_startup: id_startup,
+                id_investidor: id_investidor,
+                status: 'pendente'
+            },
+            data: { status: 'aceito' }
         });
 
-        res.status(201).json({ message: 'Match realizado com sucesso!', match: novoMatch });
+        // 2. VERIFICA SE O MATCH JÁ EXISTE (Para não duplicar a conversa)
+        let matchExistente = await prisma.match_conexao.findFirst({
+            where: { id_startup: id_startup, id_investidor: id_investidor }
+        });
+
+        let matchFinal;
+
+        if (matchExistente) {
+            matchFinal = matchExistente;
+
+            // Self-healing: Garante que a conversa existe mesmo se reaproveitar o match
+            const conversaExistente = await prisma.conversa.findFirst({
+                where: { id_match: matchExistente.id_match }
+            });
+
+            if (!conversaExistente) {
+                await prisma.conversa.create({
+                    data: {
+                        id_conversa: randomUUID(),
+                        match_conexao: { connect: { id_match: matchExistente.id_match } }
+                    }
+                });
+            }
+        } else {
+            // 3. SE NÃO EXISTIR, CRIA O MATCH E A CONVERSA DO ZERO
+            const novoMatchId = randomUUID();
+            matchFinal = await prisma.match_conexao.create({
+                data: {
+                    id_match: novoMatchId,
+                    id_startup: id_startup,
+                    id_investidor: id_investidor
+                }
+            });
+
+            await prisma.conversa.create({
+                data: {
+                    id_conversa: randomUUID(),
+                    match_conexao: { connect: { id_match: novoMatchId } }
+                }
+            });
+        }
+
+        res.status(201).json({ message: 'Match realizado com sucesso!', match: matchFinal });
     } catch (error) {
         console.error("Erro ao aceitar match:", error);
         res.status(500).json({ error: 'Erro interno ao processar match' });

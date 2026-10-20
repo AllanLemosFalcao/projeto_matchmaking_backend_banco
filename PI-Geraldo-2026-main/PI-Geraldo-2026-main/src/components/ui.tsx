@@ -68,13 +68,13 @@ export function Selecao({
     <Rotulo label={label}>
       <select className={`${campoClasses} appearance-none bg-fundo`} {...props}>
         {opcoes.map((o) => (
-          <option key={o}>{o}</option>
+          <option key={o}className="bg-zinc-900 text-white">{o}
+          </option>
         ))}
       </select>
     </Rotulo>
   )
 }
-
 /** Grupo de chips de seleção múltipla (segmentos, estágios…) */
 export function Chips<T extends string>({
   label,

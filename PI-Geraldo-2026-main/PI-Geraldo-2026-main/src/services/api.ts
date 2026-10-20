@@ -79,12 +79,13 @@ export async function cadastrar(dados: DadosCadastro): Promise<Perfil> {
 }
 
 export async function atualizarPerfil(perfil: Perfil): Promise<Perfil> {
-  await esperar()
-  const i = db.perfis.findIndex((p) => p.id === perfil.id)
-  if (i >= 0) db.perfis[i] = perfil
-  salvarDb()
-  return perfil
-}
+  const resposta = await http<{ message: string, perfil: Perfil }>('/perfil', {
+    method: 'PUT',
+    body: JSON.stringify(perfil),
+  });
+  
+  return resposta.perfil;
+} 
 
 // ---------- Busca ----------
 
@@ -103,13 +104,13 @@ export async function listarLocalizacoes(papel: Perfil['papel']): Promise<string
   return [...new Set(db.perfis.filter((p) => p.papel === alvo).map((p) => p.localizacao))].sort()
 }
 
-/** Recomendações simples por afinidade de segmento/estágio/valor. */
+/** Recomendações calculadas pelo algoritmo de compatibilidade no backend. */
 export async function recomendacoes(usuario: Perfil, limite = 4): Promise<Perfil[]> {
   try {
-    // Reaproveita a nossa rota de busca real enviando filtros vazios
-    const resultados = await buscar(usuario, { texto: '' });
+    const resultados = await http<Perfil[]>('/recomendacoes', {
+      method: 'GET'
+    });
     
-    // Retorna apenas a quantidade solicitada pelo limite (ex: os 4 primeiros)
     return resultados.slice(0, limite);
   } catch (error) {
     console.error("Erro ao buscar recomendações:", error);
@@ -211,5 +212,11 @@ export async function enviarMensagem(matchId: string, autorId: string, texto: st
   return await http<Mensagem>('/mensagens', {
     method: 'POST',
     body: JSON.stringify({ matchId, texto })
+  });
+}
+
+export async function buscarPerfilPorId(id: string): Promise<Perfil> {
+  return await http<Perfil>(`/perfil/${id}`, {
+    method: 'GET'
   });
 }

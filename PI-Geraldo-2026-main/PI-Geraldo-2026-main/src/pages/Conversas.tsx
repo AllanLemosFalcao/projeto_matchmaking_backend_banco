@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
+import { io } from 'socket.io-client'
 import { Link, useParams } from 'react-router'
 import { CabecalhoPagina } from '../components/CabecalhoPagina'
 import { FotoPerfil } from '../components/FotoPerfil'
@@ -9,6 +10,9 @@ import * as api from '../services/api'
 import type { Match, Mensagem, Perfil } from '../types'
 import { formatarHora } from '../utils/formatar'
 import { subtitulo } from '../utils/perfil'
+
+// Conexão com o backend via WebSocket
+const socket = io('http://localhost:3000');
 
 export function Conversas() {
   const { matchId } = useParams()
@@ -23,12 +27,34 @@ export function Conversas() {
     if (usuario) api.listarMatches(usuario.id).then(setConversas)
   }, [usuario, matchId])
 
+  // ==========================================
+  // LÓGICA ATUALIZADA: WebSocket em Tempo Real
+  // ==========================================
   useEffect(() => {
     if (!matchId) return
     let atual = true
+    
+    // 1. Busca o histórico de mensagens salvas no banco
     api.listarMensagens(matchId).then((m) => atual && setMensagens(m))
+
+    // 2. Avisa ao backend que o usuário abriu esta conversa específica (entra na "sala")
+    socket.emit('entrar_conversa', matchId)
+
+    // 3. Fica escutando novas mensagens disparadas pelo backend
+    const lidarComNovaMensagem = (novaMsg: Mensagem) => {
+      setMensagens((msgsAntigas) => {
+        // Evita duplicar a mensagem na tela para a pessoa que acabou de enviar
+        if (msgsAntigas.some(m => m.id === novaMsg.id)) return msgsAntigas
+        return [...msgsAntigas, novaMsg]
+      })
+    }
+
+    socket.on('nova_mensagem', lidarComNovaMensagem)
+
     return () => {
       atual = false
+      // 4. Desconecta o ouvinte ao sair da tela para evitar vazamento de memória
+      socket.off('nova_mensagem', lidarComNovaMensagem)
     }
   }, [matchId])
 
@@ -42,9 +68,19 @@ export function Conversas() {
   async function enviar(e: FormEvent) {
     e.preventDefault()
     if (!usuario || !matchId || !texto.trim()) return
-    const msg = await api.enviarMensagem(matchId, usuario.id, texto.trim())
-    setMensagens((m) => [...m, msg])
-    setTexto('')
+    
+    // Salva o texto e limpa o input imediatamente para dar uma sensação de rapidez (UX)
+    const textoEnviado = texto.trim()
+    setTexto('') 
+
+    // Dispara para o banco de dados
+    const msg = await api.enviarMensagem(matchId, usuario.id, textoEnviado)
+    
+    // Adiciona na tela apenas se o WebSocket JÁ NÃO TIVER inserido a mesma mensagem milissegundos antes
+    setMensagens((m) => {
+      if (m.some((existente) => existente.id === msg.id)) return m
+      return [...m, msg]
+    })
   }
 
   return (

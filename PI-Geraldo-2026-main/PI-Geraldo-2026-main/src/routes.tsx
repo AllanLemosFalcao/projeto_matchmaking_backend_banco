@@ -10,6 +10,7 @@ import { Login } from './pages/Login'
 import { NaoEncontrada } from './pages/NaoEncontrada'
 import { Perfil } from './pages/Perfil'
 import { PlanosPagina } from './pages/PlanosPagina'
+import { VisualizarPerfil } from './pages/VisualizarPerfil'
 
 export const router = createBrowserRouter([
   { path: '/', element: <Landing /> },
@@ -26,6 +27,7 @@ export const router = createBrowserRouter([
           { path: 'perfil', element: <Perfil /> },
           { path: 'conversas/:matchId?', element: <Conversas /> },
           { path: 'planos', element: <PlanosPagina /> },
+          { path: 'perfil/:id', element: <VisualizarPerfil /> },
         ],
       },
     ],

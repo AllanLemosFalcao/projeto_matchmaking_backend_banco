@@ -49,14 +49,23 @@ export const enviarMensagem = async (req: AuthRequest, res: Response) => {
             }
         });
 
-        // Devolvemos formatado para o React
-        res.status(201).json({
+        const mensagemFormatada = {
             id: novaMensagem.id_mensagem,
             matchId: matchId, 
             autorId: novaMensagem.id_remetente_usuario,
             texto: novaMensagem.conteudo,
             enviadaEm: (novaMensagem.enviada_em || new Date()).toISOString()
-        });
+        };
+
+        // Dispara a mensagem em tempo real para a sala (matchId)
+        const io = (req as any).io;
+        if (io) {
+            io.to(matchId).emit('nova_mensagem', mensagemFormatada);
+        }
+
+        // Devolvemos formatado para o React (MANTENHA APENAS ESTE E APAGUE O SEGUNDO)
+        return res.status(201).json(mensagemFormatada);
+
     } catch (error) {
         console.error("Erro ao enviar mensagem:", error);
         res.status(500).json({ error: 'Erro interno ao enviar mensagem' });

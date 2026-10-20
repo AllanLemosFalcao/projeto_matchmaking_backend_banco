@@ -22,6 +22,7 @@ const vazio: Record<Papel, DadosCadastro> = {
     modeloNegocio: '',
     valorInvestimento: 0,
     participacaoOferecida: 0,
+    aceiteTermos: false,
   },
   investidor: {
     papel: 'investidor',
@@ -34,6 +35,7 @@ const vazio: Record<Papel, DadosCadastro> = {
     estagiosPreferidos: [],
     investimentoMinimo: 0,
     investimentoMaximo: 0,
+    aceiteTermos: false,
   },
 }
 
@@ -67,6 +69,12 @@ export function Cadastro() {
   async function enviar(e: FormEvent) {
     e.preventDefault()
     if (!dados) return
+
+    if (!dados.aceiteTermos) {
+      setErro('Você precisa aceitar os Termos de Uso e a Política de Privacidade (LGPD) para se cadastrar.')
+      return
+    }
+
     if (dados.papel === 'investidor' && dados.segmentosInteresse.length === 0) {
       setErro('Escolha pelo menos um segmento de interesse.')
       return
@@ -154,8 +162,31 @@ export function Cadastro() {
                   <CamposInvestidor dados={dados} mudar={mudar} />
                 )}
 
+                {/* ======= CHECKBOX DE ACEITE LGPD AQUI ======= */}
+                <label className="flex items-start gap-3 text-sm text-zinc-300 cursor-pointer pt-2">
+                  <input
+                    type="checkbox"
+                    required
+                    checked={dados.aceiteTermos || false}
+                    onChange={(e) => mudar({ aceiteTermos: e.target.checked })}
+                    className="mt-1 size-4 rounded border-borda bg-zinc-900 text-(--acento) focus:ring-0 cursor-pointer"
+                  />
+                  <span>
+                    Li e concordo com os{' '}
+                    <a href="#" className="underline hover:text-white" onClick={(e) => e.preventDefault()}>
+                      Termos de Uso
+                    </a>{' '}
+                    e a{' '}
+                    <a href="#" className="underline hover:text-white" onClick={(e) => e.preventDefault()}>
+                      Política de Privacidade (LGPD)
+                    </a>.
+                  </span>
+                </label>
+                {/* =========================================== */}
+
                 {erro && <p className="text-sm text-rosa">{erro}</p>}
 
+                {/* DIV DOS BOTÕES */}
                 <div className="flex gap-4 pt-4">
                   <Botao type="button" variante="contorno" className="px-10" onClick={() => escolher(null)}>
                     Voltar

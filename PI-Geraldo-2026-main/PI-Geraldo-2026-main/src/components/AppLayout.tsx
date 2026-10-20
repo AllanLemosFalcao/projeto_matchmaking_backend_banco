@@ -1,4 +1,4 @@
-import { NavLink, Outlet } from 'react-router'
+import { NavLink, Outlet, useNavigate } from 'react-router'
 import { useAuth } from '../contexts/auth'
 import { FotoPerfil } from './FotoPerfil'
 import { IconeBusca, IconeConversas, IconeDashboard, IconePerfil, IconePlanos, IconeSair } from './icones'
@@ -15,6 +15,8 @@ const itens = [
 
 export function AppLayout() {
   const { usuario, sair } = useAuth()
+  const navigate = useNavigate() // Instanciando a navegação
+  
   if (!usuario) return null
 
   return (
@@ -40,13 +42,18 @@ export function AppLayout() {
         </nav>
 
         <div className="mt-auto border-t border-white/15 pt-5">
-          <div className="flex items-center gap-3 rounded-xl border border-borda p-2.5">
+          {/* DIV ATUALIZADA: Agora é clicável e direciona para o perfil público */}
+          <div 
+            onClick={() => navigate(`/perfil/${usuario.id}`)}
+            className="flex items-center gap-3 rounded-xl border border-borda p-2.5 cursor-pointer hover:bg-white/5 transition"
+          >
             <FotoPerfil perfil={usuario} tamanho="sm" />
             <div className="min-w-0">
               <p className="truncate">{usuario.nome}</p>
               <p className="text-sm text-suave capitalize">{usuario.papel}</p>
             </div>
           </div>
+          
           <button onClick={sair} className="mt-4 flex items-center gap-3 px-4 py-2 text-lg hover:text-zinc-300">
             <IconeSair />
             Sair

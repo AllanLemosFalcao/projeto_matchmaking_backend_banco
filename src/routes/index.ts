@@ -1,10 +1,12 @@
 import { Router } from 'express';
 import { register, login } from '../controllers/authController';
-import { buscarPerfis } from '../controllers/buscaController';
 import { obterDashboard } from '../controllers/dashboardController';
 import { criarInteresse, interessesPendentes, aceitarMatch, listarMatches } from '../controllers/matchController';
 import { authMiddleware } from '../middlewares/authMiddleware';
 import { enviarMensagem, listarMensagens } from '../controllers/mensagemController';
+import { atualizarPerfil } from '../controllers/perfilController';
+import { obterRecomendacoes } from '../controllers/recomendacaoController';
+import { buscarPerfis, buscarPerfilPorId } from '../controllers/buscaController';
 
 const router = Router();
 
@@ -15,12 +17,15 @@ router.post('/auth/login', login);
 // Rotas Privadas
 router.post('/buscar', authMiddleware, buscarPerfis);
 router.get('/dashboard', authMiddleware, obterDashboard);
+router.put('/perfil', authMiddleware, atualizarPerfil);
+router.get('/perfil/:id', authMiddleware, buscarPerfilPorId);
 
 // Rotas de Matchmaking
 router.post('/match/interesse', authMiddleware, criarInteresse);
 router.get('/match/pendentes', authMiddleware, interessesPendentes);
 router.post('/match/aceitar', authMiddleware, aceitarMatch);
 router.get('/match/listar', authMiddleware, listarMatches);
+router.get('/recomendacoes', authMiddleware, obterRecomendacoes);
 
 // Rotas de Mensagens
 router.post('/mensagens', authMiddleware, enviarMensagem);

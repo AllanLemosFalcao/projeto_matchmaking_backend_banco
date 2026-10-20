@@ -4,6 +4,28 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { randomUUID } from 'crypto'; // Gerador nativo de IDs do Node.js
 
+const mapearEstagioInvestidor = (estagioFront: string) => {
+    const mapa: Record<string, string> = {
+        'Ideação': 'ideacao',
+        'Validação': 'validacao',
+        'MVP': 'MVP',
+        'Tração inicial': 'tracao_inicial', // Correção conforme schema
+        'Crescimento / Scale': 'crescimento___scale' // Correção conforme schema
+    };
+    return mapa[estagioFront] || 'ideacao';
+};
+
+const desmapearEstagioInvestidor = (estagioBanco: string) => {
+    const mapa: Record<string, string> = {
+        'ideacao': 'Ideação',
+        'validacao': 'Validação',
+        'MVP': 'MVP',
+        'tracao_inicial': 'Tração inicial',
+        'crescimento___scale': 'Crescimento / Scale'
+    };
+    return mapa[estagioBanco] || 'Ideação';
+};
+
 const prisma = new PrismaClient();
 
 const mapearEstagio = (estagioFront: string) => {
@@ -23,10 +45,10 @@ const mapearEstagio = (estagioFront: string) => {
 export const register = async (req: Request, res: Response) => {
     try {
         const {
-            papel, nome, email, senha, localizacao, foto,
-            descricao, segmento, estagio, composicaoEquipe, mercado, modeloNegocio, valorInvestimento, participacaoOferecida,
-            tese, segmentosInteresse, estagiosPreferidos, investimentoMinimo, investimentoMaximo
-        } = req.body;
+    papel, nome, email, senha, localizacao, foto, aceiteTermos,
+    descricao, segmento, estagio, composicaoEquipe, mercado, modeloNegocio, valorInvestimento, participacaoOferecida,
+    tese, segmentosInteresse, estagiosPreferidos, investimentoMinimo, investimentoMaximo
+} = req.body;
 
         const existingUser = await prisma.usuario.findUnique({ where: { email } });
         if (existingUser) {
@@ -42,7 +64,7 @@ export const register = async (req: Request, res: Response) => {
             
             const usuario = await tx.usuario.create({
                 data: {
-                    id_usuario: userId, // ID gerado manualmente
+                    id_usuario: userId,    
                     nome,
                     email,
                     senha_hash,
@@ -50,11 +72,23 @@ export const register = async (req: Request, res: Response) => {
                     foto_url: foto || null, 
                 }
             });
-
+        // Registro do Consentimento LGPD
+            if (aceiteTermos) {
+                await tx.consentimento_lgpd.create({
+                    data: {
+                        id_consentimento: randomUUID(),
+                        id_usuario: userId,
+                        tipo_consentimento: 'termos_e_privacidade',
+                        versao_termo: 'v1.0',
+                        aceite: true
+                    }
+                });
+            }
             if (papel === 'startup') {
+                const id_startup = randomUUID();
                 await tx.startup.create({
                     data: {
-                        id_startup: randomUUID(), // ID gerado manualmente
+                        id_startup: id_startup,
                         id_usuario: userId,
                         nome_fantasia: nome, 
                         cidade: localizacao,
@@ -68,10 +102,19 @@ export const register = async (req: Request, res: Response) => {
                     }
                 });
 
+                if (segmento) {
+                    let seg = await tx.segmento.findFirst({ where: { nome: segmento } });
+                    if (!seg) seg = await tx.segmento.create({ data: { id_segmento: randomUUID(), nome: segmento } });
+                    await tx.startup_segmento.create({
+                        data: { id_startup: id_startup, id_segmento: seg.id_segmento, principal: true }
+                    });
+                }
+
             } else if (papel === 'investidor') {
+                const id_investidor = randomUUID();
                 await tx.investidor.create({
                     data: {
-                        id_investidor: randomUUID(), // ID gerado manualmente
+                        id_investidor: id_investidor,
                         id_usuario: userId,
                         cidade: localizacao,
                         tese_investimento: tese,
@@ -80,6 +123,20 @@ export const register = async (req: Request, res: Response) => {
                         tipo_investidor: 'outro' 
                     }
                 });
+
+                for (const nomeSeg of (segmentosInteresse || [])) {
+                    let seg = await tx.segmento.findFirst({ where: { nome: nomeSeg } });
+                    if (!seg) seg = await tx.segmento.create({ data: { id_segmento: randomUUID(), nome: nomeSeg } });
+                    await tx.investidor_segmento.create({
+                        data: { id_investidor: id_investidor, id_segmento: seg.id_segmento }
+                    });
+                }
+
+                for (const est of (estagiosPreferidos || [])) {
+                    await tx.investidor_estagio.create({
+                        data: { id_investidor: id_investidor, estagio: mapearEstagioInvestidor(est) as any }
+                    });
+                }
             }
 
             return usuario;
@@ -91,13 +148,39 @@ export const register = async (req: Request, res: Response) => {
             { expiresIn: '1d' }
         );
 
-        res.status(201).json({
+        let perfilRetorno: any = {
             id: novoUsuario.id_usuario,
             nome: novoUsuario.nome,
             email: novoUsuario.email,
             papel: novoUsuario.tipo_usuario,
+            foto: novoUsuario.foto_url,
             token
-        });
+        };
+
+        if (papel === 'startup') {
+            Object.assign(perfilRetorno, {
+                localizacao,
+                descricao,
+                segmento,
+                estagio,
+                composicaoEquipe,
+                mercado,
+                modeloNegocio,
+                valorInvestimento: Number(valorInvestimento),
+                participacaoOferecida: Number(participacaoOferecida)
+            });
+        } else if (papel === 'investidor') {
+            Object.assign(perfilRetorno, {
+                localizacao,
+                tese,
+                segmentosInteresse: segmentosInteresse || [],
+                estagiosPreferidos: estagiosPreferidos || [],
+                investimentoMinimo: Number(investimentoMinimo),
+                investimentoMaximo: Number(investimentoMaximo)
+            });
+        }
+
+        res.status(201).json(perfilRetorno);
 
     } catch (error) {
         console.error("Erro no cadastro:", error);
@@ -155,11 +238,25 @@ export const login = async (req: Request, res: Response) => {
                 participacaoOferecida: Number(usuario.startup.participacao_oferecida)
             });
         } else if (usuario.tipo_usuario === 'investidor' && usuario.investidor) {
+            
+            const relSegmentos = await prisma.investidor_segmento.findMany({ 
+                where: { id_investidor: usuario.investidor.id_investidor },
+                include: { segmento: true }
+            });
+            const arraySegmentos = relSegmentos.map(rel => rel.segmento.nome);
+
+            const relEstagios = await prisma.investidor_estagio.findMany({ 
+                where: { id_investidor: usuario.investidor.id_investidor }
+            });
+            const arrayEstagios = relEstagios.map(r => desmapearEstagioInvestidor(r.estagio));
+
             Object.assign(perfilBase, {
                 localizacao: usuario.investidor.cidade,
                 tese: usuario.investidor.tese_investimento,
                 investimentoMinimo: Number(usuario.investidor.faixa_minima),
                 investimentoMaximo: Number(usuario.investidor.faixa_maxima),
+                segmentosInteresse: arraySegmentos,
+                estagiosPreferidos: arrayEstagios
             });
         }
 
