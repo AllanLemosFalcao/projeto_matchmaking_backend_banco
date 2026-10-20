@@ -62,28 +62,10 @@ export function Dashboard() {
 
   if (!usuario) return null
 
-  // 1. Lógica para verificar se há ações pendentes
-  const pendentes = resumo?.interessesRecebidos || 0
-  const temPendente = pendentes > 0
-
-  // 2. Array de cards agora é dinâmico e controla a cor do texto também
   const cards = [
-    { 
-      valor: resumo?.interessesEnviados, 
-      label: 'Interesses enviados', 
-      cor: 'bg-rosa text-zinc-950' 
-    },
-    { 
-      valor: resumo?.interessesRecebidos, 
-      label: temPendente ? 'Ações pendentes' : 'Interesses recebidos', 
-      cor: temPendente ? 'bg-red-600 text-white shadow-lg shadow-red-500/30' : 'bg-lima text-zinc-950',
-      alerta: temPendente ? `Você tem ${pendentes} oportunidade(s) aguardando sua resposta.` : null
-    },
-    { 
-      valor: resumo?.matches, 
-      label: 'Matches', 
-      cor: 'bg-linear-to-b from-rosa from-30% to-lima text-zinc-950' 
-    },
+    { valor: resumo?.interessesEnviados, label: 'Interesses enviados', cor: 'bg-rosa' },
+    { valor: resumo?.interessesRecebidos, label: 'Interesses recebidos', cor: 'bg-lima' },
+    { valor: resumo?.matches, label: 'Matches', cor: 'bg-linear-to-b from-rosa from-30% to-lima' },
   ]
 
   return (
@@ -92,15 +74,9 @@ export function Dashboard() {
 
       <div className="mx-auto grid max-w-4xl grid-cols-3 gap-3 sm:gap-8">
         {cards.map((c) => (
-          <div key={c.label} className={`flex flex-col justify-center rounded-3xl p-4 sm:px-10 sm:py-9 transition-all ${c.cor}`}>
+          <div key={c.label} className={`rounded-3xl p-4 text-zinc-950 sm:px-10 sm:py-9 ${c.cor}`}>
             <p className="titulo text-4xl sm:text-6xl">{c.valor ?? '–'}</p>
-            <p className="mt-2 text-sm font-semibold sm:mt-4 sm:text-xl">{c.label}</p>
-            
-            {c.alerta && (
-              <p className="mt-2 text-xs sm:text-sm font-medium opacity-90 leading-tight">
-                {c.alerta}
-              </p>
-            )}
+            <p className="mt-2 text-sm sm:mt-4 sm:text-xl">{c.label}</p>
           </div>
         ))}
       </div>
@@ -116,15 +92,14 @@ export function Dashboard() {
             <p className="text-zinc-300">Complete seu perfil para receber recomendações.</p>
           ) : (
             <ul className="space-y-6">
-                {recomendados.map((p) => (
-                  <li key={p.id}>
-                    {/* Linha inteira clicável direcionando para a visualização do perfil */}
-                    <Link to={`/perfil/${p.id}`} className="block rounded-xl transition hover:opacity-80">
-                      <ItemPerfil perfil={p} />
-                    </Link>
-                  </li>
-                ))}
-              </ul>
+              {recomendados.map((p) => (
+                <li key={p.id}>
+                  <Link to={`/perfil/${p.id}`} className="block rounded-xl transition hover:opacity-80">
+                    <ItemPerfil perfil={p} />
+                  </Link>
+                </li>
+              ))}
+            </ul>
           )}
         </Cartao>
       </Secao>
