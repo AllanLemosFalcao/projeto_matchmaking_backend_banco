@@ -45,14 +45,24 @@ export function Buscar() {
   const [filtros, setFiltros] = useState<FiltrosBusca>({ texto: '', segmento: '', localizacao: '', estagio: '' })
   const [resultados, setResultados] = useState<Perfil[] | null>(null)
   const [locais, setLocais] = useState<string[]>([])
+  
+  // Estados de conexão
   const [enviados, setEnviados] = useState<Set<string>>(new Set())
-  /** id do outro perfil -> id do match */
+  const [recebidos, setRecebidos] = useState<Set<string>>(new Set()) // Interesses que outros enviaram pra mim
   const [matches, setMatches] = useState<Record<string, string>>({})
+  const [carregandoAcao, setCarregandoAcao] = useState<string | null>(null)
 
   useEffect(() => {
     if (!usuario) return
     api.listarLocalizacoes(usuario.papel).then(setLocais)
+    
+    // Busca interesses enviados
     api.interessesEnviados(usuario.id).then((ids) => setEnviados(new Set(ids)))
+    
+    // Busca interesses recebidos (pendentes)
+    api.interessesPendentes(usuario.id).then((lista) => setRecebidos(new Set(lista.map(p => p.id))))
+    
+    // Busca matches
     api
       .listarMatches(usuario.id)
       .then((lista) => setMatches(Object.fromEntries(lista.map(({ match, outro }) => [outro.id, match.id]))))
@@ -62,9 +72,7 @@ export function Buscar() {
     if (!usuario) return
     let atual = true
     api.buscar(usuario, filtros).then((r) => atual && setResultados(r))
-    return () => {
-      atual = false
-    }
+    return () => { atual = false }
   }, [usuario, filtros])
 
   if (!usuario) return null
@@ -73,9 +81,31 @@ export function Buscar() {
 
   async function registrar(alvo: Perfil) {
     if (!usuario) return
-    setEnviados((s) => new Set(s).add(alvo.id))
-    const match = await api.registrarInteresse(usuario.id, alvo.id)
-    if (match) setMatches((m) => ({ ...m, [alvo.id]: match.id }))
+    setCarregandoAcao(alvo.id)
+    try {
+      setEnviados((s) => new Set(s).add(alvo.id))
+      const match = await api.registrarInteresse(usuario.id, alvo.id)
+      if (match) setMatches((m) => ({ ...m, [alvo.id]: match.id }))
+    } finally {
+      setCarregandoAcao(null)
+    }
+  }
+
+  async function aceitar(alvoId: string) {
+    setCarregandoAcao(alvoId)
+    try {
+      const match = await api.aceitarPendente(alvoId)
+      if (match) {
+        setMatches((m) => ({ ...m, [alvoId]: match.id }))
+        setRecebidos((prev) => {
+          const next = new Set(prev)
+          next.delete(alvoId)
+          return next
+        })
+      }
+    } finally {
+      setCarregandoAcao(null)
+    }
   }
 
   return (
@@ -93,24 +123,9 @@ export function Buscar() {
           onChange={(e) => mudar({ texto: e.target.value })}
           className={`${filtroClasses} bg-zinc-900 placeholder:text-zinc-300 sm:col-span-3 lg:col-span-1`}
         />
-        <Filtro
-          valor={filtros.segmento}
-          onChange={(v) => mudar({ segmento: v })}
-          todos="Todos os segmentos"
-          opcoes={SEGMENTOS}
-        />
-        <Filtro
-          valor={filtros.localizacao}
-          onChange={(v) => mudar({ localizacao: v })}
-          todos="Todos os locais"
-          opcoes={locais}
-        />
-        <Filtro
-          valor={filtros.estagio}
-          onChange={(v) => mudar({ estagio: v })}
-          todos="Todos os estágios"
-          opcoes={ESTAGIOS}
-        />
+        <Filtro valor={filtros.segmento} onChange={(v) => mudar({ segmento: v })} todos="Todos os segmentos" opcoes={SEGMENTOS} />
+        <Filtro valor={filtros.localizacao} onChange={(v) => mudar({ localizacao: v })} todos="Todos os locais" opcoes={locais} />
+        <Filtro valor={filtros.estagio} onChange={(v) => mudar({ estagio: v })} todos="Todos os estágios" opcoes={ESTAGIOS} />
       </Cartao>
 
       <div className="mt-8 space-y-6">
@@ -119,10 +134,12 @@ export function Buscar() {
 
         {resultados?.map((p) => {
           const matchId = matches[p.id]
+          const isRecebido = recebidos.has(p.id)
+          const isEnviado = enviados.has(p.id)
+
           return (
             <Cartao key={p.id} className="flex flex-col gap-6 p-6 sm:flex-row sm:p-11">
               
-              {/* Foto de perfil clicável direcionando para a página do perfil */}
               <button 
                 type="button"
                 onClick={() => navigate(`/perfil/${p.id}`)}
@@ -133,7 +150,19 @@ export function Buscar() {
               </button>
 
               <div className="min-w-0 flex-1 space-y-4">
-                <h2 className="text-2xl font-semibold">{p.nome}</h2>
+                
+                {/* Título com as Badges de Status ao lado */}
+                <div className="flex flex-wrap items-center gap-3">
+                  <h2 className="text-2xl font-semibold">{p.nome}</h2>
+                  {matchId ? (
+                    <span className="rounded-full bg-lima/20 text-lima px-3 py-1 text-xs font-bold border border-lima/30">🔥 Match</span>
+                  ) : isRecebido ? (
+                    <span className="rounded-full bg-(--acento)/20 text-(--acento) px-3 py-1 text-xs font-bold border border-(--acento)/30">👀 Quer conectar</span>
+                  ) : isEnviado ? (
+                    <span className="rounded-full bg-white/10 text-suave px-3 py-1 text-xs font-bold border border-white/20">⏳ Pendente</span>
+                  ) : null}
+                </div>
+
                 <div className="flex flex-wrap gap-2">
                   {p.papel === 'startup' ? (
                     <>
@@ -153,10 +182,8 @@ export function Buscar() {
                 </p>
               </div>
 
-              {/* === COLUNA DA DIREITA (SELOS E BOTÕES) === */}
+              {/* === COLUNA DA DIREITA === */}
               <div className="flex flex-col items-end justify-start gap-4 mt-4 sm:mt-0 w-full sm:w-auto">
-                
-                {/* Linha dos Selos (Match e Equity/Ticket) */}
                 <div className="flex flex-wrap justify-end gap-2">
                   {p.score !== undefined && compatibilidadeVisual(p.score) && (
                     <span className="px-3 py-1 rounded-full bg-white/10 text-white text-sm font-medium border border-white/20 shadow-lg">
@@ -166,27 +193,28 @@ export function Buscar() {
                   {p.papel === 'startup' && <Selo>{destaque(p)}</Selo>}
                 </div>
                 
-                {/* Linha dos Botões */}
                 <div className="flex flex-col gap-3 w-full sm:w-auto mt-auto">
                   <Botao variante="contorno" onClick={() => navigate(`/perfil/${p.id}`)}>
                     Ver perfil
                   </Botao>
-                  
                   {matchId ? (
                     <Botao variante="branco" onClick={() => navigate(`/conversas/${matchId}`)}>
                       Ir para conversa
                     </Botao>
-                  ) : enviados.has(p.id) ? (
+                  ) : isRecebido ? (
+                    <Botao onClick={() => aceitar(p.id)} disabled={carregandoAcao === p.id}>
+                      {carregandoAcao === p.id ? 'Aceitando...' : 'Aceitar e Conectar'}
+                    </Botao>
+                  ) : isEnviado ? (
                     <Botao variante="contorno" disabled>
                       Interesse registrado
                     </Botao>
                   ) : (
-                    <Botao variante={buscaStartups ? 'rosa' : 'acento'} onClick={() => registrar(p)}>
-                      Registrar interesse
+                    <Botao variante={buscaStartups ? 'rosa' : 'acento'} onClick={() => registrar(p)} disabled={carregandoAcao === p.id}>
+                      {carregandoAcao === p.id ? 'Registrando...' : 'Registrar interesse'}
                     </Botao>
                   )}
                 </div>
-
               </div>
             </Cartao>
           )

@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { register, login } from '../controllers/authController';
-import { obterDashboard } from '../controllers/dashboardController';
-import { criarInteresse, interessesPendentes, aceitarMatch, listarMatches } from '../controllers/matchController';
+import { obterDashboard, obterDetalhesDashboard } from '../controllers/dashboardController';
+import { criarInteresse, interessesPendentes, aceitarMatch, listarMatches, interessesEnviados, recusarInteresse } from '../controllers/matchController';
 import { authMiddleware } from '../middlewares/authMiddleware';
 import { enviarMensagem, listarMensagens } from '../controllers/mensagemController';
 import { atualizarPerfil } from '../controllers/perfilController';
@@ -25,7 +25,10 @@ router.post('/match/interesse', authMiddleware, criarInteresse);
 router.get('/match/pendentes', authMiddleware, interessesPendentes);
 router.post('/match/aceitar', authMiddleware, aceitarMatch);
 router.get('/match/listar', authMiddleware, listarMatches);
+router.get('/match/enviados', authMiddleware, interessesEnviados); 
 router.get('/recomendacoes', authMiddleware, obterRecomendacoes);
+router.post('/match/recusar', authMiddleware, recusarInteresse);
+router.get('/dashboard/detalhes', authMiddleware, obterDetalhesDashboard);
 
 // Rotas de Mensagens
 router.post('/mensagens', authMiddleware, enviarMensagem);

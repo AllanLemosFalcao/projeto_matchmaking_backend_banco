@@ -293,3 +293,82 @@ export const listarMatches = async (req: AuthRequest, res: Response) => {
         res.status(500).json({ error: 'Erro interno ao listar matches' });
     }
 };
+
+// ==========================================
+// LISTAR INTERESSES ENVIADOS (Para saber em quem o usuário já clicou)
+// ==========================================
+export const interessesEnviados = async (req: AuthRequest, res: Response) => {
+    try {
+        if (!req.usuarioId) return res.status(401).json({ error: 'Não autorizado' });
+        
+        const usuarioLogado = await prisma.usuario.findUnique({
+            where: { id_usuario: req.usuarioId },
+            include: { startup: true, investidor: true }
+        });
+
+        if (usuarioLogado?.tipo_usuario === 'startup' && usuarioLogado.startup) {
+            const interesses = await prisma.interesse.findMany({
+                where: { id_startup: usuarioLogado.startup.id_startup, iniciado_por: 'startup' },
+                include: { investidor: true }
+            });
+            // Retorna um array com os IDs dos usuários (investidores)
+            return res.json(interesses.map(i => i.investidor.id_usuario));
+        } 
+        else if (usuarioLogado?.tipo_usuario === 'investidor' && usuarioLogado.investidor) {
+            const interesses = await prisma.interesse.findMany({
+                where: { id_investidor: usuarioLogado.investidor.id_investidor, iniciado_por: 'investidor' },
+                include: { startup: true }
+            });
+            // Retorna um array com os IDs dos usuários (startups)
+            return res.json(interesses.map(i => i.startup.id_usuario));
+        }
+
+        res.json([]);
+    } catch (error) {
+        console.error("Erro ao buscar interesses enviados:", error);
+        res.status(500).json({ error: 'Erro interno' });
+    }
+};
+
+// ==========================================
+// RECUSAR O INTERESSE
+// ==========================================
+export const recusarInteresse = async (req: AuthRequest, res: Response) => {
+    try {
+        if (!req.usuarioId) return res.status(401).json({ error: 'Não autorizado' });
+        
+        const { alvoId } = req.body; 
+
+        const usuarioLogado = await prisma.usuario.findUnique({
+            where: { id_usuario: req.usuarioId },
+            include: { startup: true, investidor: true }
+        });
+
+        const usuarioAlvo = await prisma.usuario.findUnique({
+            where: { id_usuario: alvoId },
+            include: { startup: true, investidor: true }
+        });
+
+        if (!usuarioLogado || !usuarioAlvo) return res.status(404).json({ error: 'Usuário inválido' });
+
+        const id_startup = usuarioLogado.tipo_usuario === 'startup' ? usuarioLogado.startup?.id_startup : usuarioAlvo.startup?.id_startup;
+        const id_investidor = usuarioLogado.tipo_usuario === 'investidor' ? usuarioLogado.investidor?.id_investidor : usuarioAlvo.investidor?.id_investidor;
+
+        if(!id_startup || !id_investidor) return res.status(400).json({error: "Erro de mapeamento de IDs"});
+
+        // ATUALIZA O STATUS DO INTERESSE PARA 'RECUSADO'
+        await prisma.interesse.updateMany({
+            where: {
+                id_startup: id_startup,
+                id_investidor: id_investidor,
+                status: 'pendente'
+            },
+            data: { status: 'recusado' }
+        });
+
+        res.status(200).json({ message: 'Interesse recusado.' });
+    } catch (error) {
+        console.error("Erro ao recusar interesse:", error);
+        res.status(500).json({ error: 'Erro interno ao recusar interesse' });
+    }
+};

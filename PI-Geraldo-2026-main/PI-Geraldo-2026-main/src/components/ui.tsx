@@ -120,7 +120,11 @@ export function Tag({ children }: { children: ReactNode }) {
 }
 
 export function Selo({ children }: { children: ReactNode }) {
-  return <span className="rounded-full bg-white/10 px-4 py-1 whitespace-nowrap sm:text-lg">{children}</span>
+  return (
+    <span className="px-3 py-1 rounded-full bg-white/10 text-white text-sm font-medium border border-white/20 shadow-lg whitespace-nowrap">
+      {children}
+    </span>
+  )
 }
 
 export function Cartao({ className = '', children }: { className?: string; children: ReactNode }) {

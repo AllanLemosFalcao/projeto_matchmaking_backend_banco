@@ -8,26 +8,28 @@ export function subtitulo(perfil: Perfil) {
     : perfil.segmentosInteresse.slice(0, 3).join(', ')
 }
 
-/** 
+/**
  * O Destaque visual do card. 
  * Para Startups, mostra a fatia da empresa oferecida (Equity).
  * Para Investidores, mostra a faixa de capital que aportam.
  */
 export function destaque(perfil: Perfil) {
   return perfil.papel === 'startup'
-    ? `Cede ${perfil.participacaoOferecida}%` 
+    ? `${perfil.participacaoOferecida}% de Equity` 
     : `${formatarReais(perfil.investimentoMinimo)} – ${formatarReais(perfil.investimentoMaximo)}`
 }
 
 /**
- * Função utilitária futura:
- * Quando o Backend enviar a propriedade 'score' real do algoritmo de Matchmaking, 
- * podemos usar esta função para renderizar um selo de "90% Match".
+ * Renderiza o selo de compatibilidade (Match) baseado no score que vem do Backend.
  */
 export function compatibilidadeVisual(score?: number) {
-  if (!score) return null;
-  const percentual = Math.min(score + 20, 100);
-  if (percentual >= 80) return `🔥 ${percentual}% Match`;
-  if (percentual >= 50) return `👍 ${percentual}% Match`;
-  return `${percentual}% Match`;
+  // Ajuste: Verifica se é estritamente undefined ou null, para não ocultar quando for 0
+  if (score === undefined || score === null) return null;
+  
+  // Adiciona um valor base para evitar que apareça 0% (sensação ruim no UX)
+  const percentual = Math.min(score + 30, 100);
+  
+  if (percentual >= 80) return `🔥 ${percentual}%  aderência`;
+  if (percentual >= 50) return `👍 ${percentual}%  aderência`;
+  return `${percentual}% aderência`;
 }

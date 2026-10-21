@@ -6,7 +6,6 @@ import type { Perfil } from '../types'
 import { FotoPerfil } from './FotoPerfil'
 import { IconeSino } from './icones'
 
-/** Sino com os interesses recebidos que ainda não foram correspondidos. */
 export function Notificacoes() {
   const { usuario } = useAuth()
   const navigate = useNavigate()
@@ -29,9 +28,16 @@ export function Notificacoes() {
 
   async function corresponder(outro: Perfil) {
     if (!usuario) return
-    const match = await api.registrarInteresse(usuario.id, outro.id)
+    const match = await api.aceitarPendente(outro.id) // Atualizado para usar o endpoint de aceitar
     setAberto(false)
     if (match) navigate(`/conversas/${match.id}`)
+  }
+
+  // NOVA FUNÇÃO: Recusar
+  async function recusar(outroId: string) {
+    await api.recusarPendente(outroId)
+    // Remove instantaneamente da lista sem precisar recarregar a tela
+    setPendentes(prev => prev.filter(p => p.id !== outroId))
   }
 
   return (
@@ -51,17 +57,29 @@ export function Notificacoes() {
             <p className="p-4 text-sm text-suave">Nenhuma notificação nova.</p>
           ) : (
             pendentes.map((p) => (
-              <div key={p.id} className="flex items-center gap-3 rounded-xl p-3">
-                <FotoPerfil perfil={p} tamanho="sm" />
-                <p className="flex-1 text-sm">
-                  <strong>{p.nome}</strong> registrou interesse em você.
-                </p>
-                <button
-                  onClick={() => corresponder(p)}
-                  className="rounded-full bg-(--acento) px-3 py-1.5 text-xs font-semibold text-zinc-950"
-                >
-                  Aceitar
-                </button>
+              <div key={p.id} className="flex flex-col gap-3 rounded-xl p-3 border-b border-borda/50 last:border-0">
+                <div className="flex items-center gap-3">
+                  <FotoPerfil perfil={p} tamanho="sm" />
+                  <p className="flex-1 text-sm">
+                    <strong>{p.nome}</strong> tem interesse em você.
+                  </p>
+                </div>
+                
+                {/* NOVOS BOTÕES: Lado a Lado */}
+                <div className="flex gap-2 justify-end mt-1">
+                  <button
+                    onClick={() => recusar(p.id)}
+                    className="rounded-full border border-borda bg-transparent px-4 py-1.5 text-xs font-semibold text-zinc-300 hover:bg-white/5 transition"
+                  >
+                    Recusar
+                  </button>
+                  <button
+                    onClick={() => corresponder(p)}
+                    className="rounded-full bg-(--acento) px-4 py-1.5 text-xs font-semibold text-zinc-950 transition hover:brightness-110"
+                  >
+                    Aceitar
+                  </button>
+                </div>
               </div>
             ))
           )}

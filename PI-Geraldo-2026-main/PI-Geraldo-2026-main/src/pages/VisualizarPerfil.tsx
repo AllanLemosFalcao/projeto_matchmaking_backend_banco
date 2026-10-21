@@ -1,152 +1,213 @@
 import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router'
-import { Cartao, Selo } from '../components/ui'
+import { CabecalhoPagina } from '../components/CabecalhoPagina'
+import { FotoPerfil } from '../components/FotoPerfil'
+import { Botao, Cartao, Tag } from '../components/ui'
+import { useAuth } from '../contexts/auth'
 import * as api from '../services/api'
-import type { Perfil, PerfilStartup, PerfilInvestidor } from '../types'
-import { formatarReais } from '../utils/formatar'
-import { destaque } from '../utils/perfil'
+import type { Perfil } from '../types'
+import { destaque, subtitulo } from '../utils/perfil'
 
 export function VisualizarPerfil() {
   const { id } = useParams()
+  const { usuario } = useAuth()
   const navigate = useNavigate()
+  
   const [perfil, setPerfil] = useState<Perfil | null>(null)
-  const [carregando, setCarregando] = useState(true)
+  const [loading, setLoading] = useState(true)
+  
+  // Status de conexão
+  const [matchId, setMatchId] = useState<string | null>(null)
+  const [enviouInteresse, setEnviouInteresse] = useState(false)
+  const [recebeuInteresse, setRecebeuInteresse] = useState(false)
+  const [carregandoAcao, setCarregandoAcao] = useState(false)
 
   useEffect(() => {
-    if (!id) return
-    api.buscarPerfilPorId(id).then((dados) => {
-      setPerfil(dados)
-      setCarregando(false)
-    }).catch(() => setCarregando(false))
-  }, [id])
+    if (!id || !usuario) return
 
-  if (carregando) return <p className="text-zinc-400 p-8">Carregando detalhes do perfil...</p>
-  if (!perfil) return <p className="text-rosa p-8">Perfil não encontrado.</p>
+    async function carregarDados() {
+      try {
+        const p = await api.buscarPerfilPorId(id!)
+        setPerfil(p)
 
-  const isStartup = perfil.papel === 'startup'
-  const pStartup = perfil as PerfilStartup
-  const pInvestidor = perfil as PerfilInvestidor
+        const matches = await api.listarMatches(usuario!.id)
+        const matchExistente = matches.find(m => m.outro.id === id)
+        if (matchExistente) {
+          setMatchId(matchExistente.match.id)
+        }
 
-  // Lógica para gerar o Avatar com a letra inicial (igual ao seu Figma)
-  const inicial = perfil.nome ? perfil.nome.charAt(0).toUpperCase() : '?'
-  const corFundoAvatar = isStartup ? 'bg-blue-500' : 'bg-emerald-500'
+        const enviados = await api.interessesEnviados(usuario!.id)
+        if (enviados.includes(id!)) {
+          setEnviouInteresse(true)
+        }
+
+        const pendentes = await api.interessesPendentes(usuario!.id)
+        if (pendentes.some(p => p.id === id)) {
+          setRecebeuInteresse(true)
+        }
+      } catch (error) {
+        console.error("Erro ao carregar perfil:", error)
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    carregarDados()
+  }, [id, usuario])
+
+  if (loading) return <p className="p-6 text-suave">Carregando perfil...</p>
+  if (!perfil) return <p className="p-6 text-suave">Perfil não encontrado.</p>
+
+  const ehMeuProprioPerfil = usuario?.id === perfil.id
+
+  async function registrar() {
+    if (!usuario || !perfil) return
+    setCarregandoAcao(true)
+    try {
+      const match = await api.registrarInteresse(usuario.id, perfil.id)
+      if (match) {
+        setMatchId(match.id)
+      } else {
+        setEnviouInteresse(true)
+      }
+    } finally {
+      setCarregandoAcao(false)
+    }
+  }
+
+  async function aceitar() {
+    if (!usuario || !perfil) return
+    setCarregandoAcao(true)
+    try {
+      const match = await api.aceitarPendente(perfil.id)
+      if (match) setMatchId(match.id)
+    } finally {
+      setCarregandoAcao(false)
+    }
+  }
+
+  async function recusar() {
+    if (!usuario || !perfil) return
+    setCarregandoAcao(true)
+    try {
+      await api.recusarPendente(perfil.id)
+      setRecebeuInteresse(false)
+    } finally {
+      setCarregandoAcao(false)
+    }
+  }
 
   return (
-    <div className="max-w-4xl mx-auto pb-10">
-      <button 
-        onClick={() => navigate(-1)} 
-        className="mb-8 flex items-center gap-2 text-zinc-400 hover:text-white transition"
-      >
-        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m15 18-6-6 6-6"/></svg>
-        Voltar
-      </button>
+    <>
+      <CabecalhoPagina titulo="Visão Geral" subtitulo={`Conheça mais sobre ${perfil.nome}`} />
 
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-white">Detalhes do Perfil</h1>
-        <p className="text-zinc-400">Analise as informações completas da conta.</p>
-      </div>
-
-      <Cartao className="p-8 sm:p-10">
-        <div className="flex flex-col sm:flex-row items-start gap-6 border-b border-white/10 pb-8">
-          
-          {/* Avatar da Empresa / Investidor */}
-          {perfil.foto ? (
-            <img src={perfil.foto} alt={perfil.nome} className="w-24 h-24 rounded-2xl object-cover" />
-          ) : (
-            <div className={`w-24 h-24 rounded-2xl flex items-center justify-center text-4xl font-bold text-white ${corFundoAvatar}`}>
-              {inicial}
+      <Cartao className="flex flex-col gap-8 p-6 sm:p-12">
+        {/* CABEÇALHO DO PERFIL E STATUS */}
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6 border-b border-borda/50 pb-8">
+          <div className="flex items-center gap-5">
+            <FotoPerfil perfil={perfil} tamanho="xl" />
+            <div>
+              <h2 className="text-3xl font-bold">{perfil.nome}</h2>
+              <p className="text-xl text-zinc-300 mt-1">{subtitulo(perfil)}</p>
+              <div className="mt-3">
+                <Tag>{perfil.localizacao}</Tag>
+              </div>
             </div>
-          )}
-          
-          <div className="flex-1 space-y-4">
-            <h2 className="text-3xl font-bold">{perfil.nome}</h2>
-            
-            {/* Tags de Segmentos e Localização */}
-            <div className="flex flex-wrap gap-2">
-              {isStartup ? (
+          </div>
+
+          {/* BOTÕES DE AÇÃO / INDICADORES DE VÍNCULO */}
+          {!ehMeuProprioPerfil && (
+            <div className="flex flex-col gap-3 w-full sm:w-auto">
+              {matchId ? (
                 <>
-                  <span className="px-3 py-1 rounded-full border border-white/10 text-sm text-zinc-300">{pStartup.segmento}</span>
-                  <span className="px-3 py-1 rounded-full border border-white/10 text-sm text-zinc-300">{pStartup.estagio}</span>
+                  <span className="text-lima text-sm font-semibold text-center sm:text-right">Vocês são um Match! 🎉</span>
+                  <Botao variante="branco" onClick={() => navigate(`/conversas/${matchId}`)}>
+                    Ir para conversa
+                  </Botao>
+                </>
+              ) : recebeuInteresse ? (
+                <>
+                  <span className="text-(--acento) text-sm font-semibold text-center sm:text-right">Tem interesse em você! 👀</span>
+                  <div className="flex gap-2">
+                    <Botao variante="contorno" onClick={recusar} disabled={carregandoAcao}>
+                      Recusar
+                    </Botao>
+                    <Botao onClick={aceitar} disabled={carregandoAcao}>
+                      {carregandoAcao ? 'Aceitando...' : 'Aceitar e Conectar'}
+                    </Botao>
+                  </div>
+                </>
+              ) : enviouInteresse ? (
+                <>
+                  <span className="text-suave text-sm text-center sm:text-right">Aguardando resposta ⏳</span>
+                  <Botao variante="contorno" disabled>
+                    Interesse registrado
+                  </Botao>
                 </>
               ) : (
-                pInvestidor.segmentosInteresse.map(s => (
-                  <span key={s} className="px-3 py-1 rounded-full border border-white/10 text-sm text-zinc-300">{s}</span>
-                ))
+                <Botao onClick={registrar} disabled={carregandoAcao}>
+                  {carregandoAcao ? 'Registrando...' : 'Registrar interesse'}
+                </Botao>
               )}
-              <span className="px-3 py-1 rounded-full border border-white/10 text-sm text-zinc-300">{perfil.localizacao}</span>
             </div>
+          )}
+        </div> {/* <-- Esta era a div que estava faltando no seu código */}
 
-            <div className="inline-block mt-2">
-               <Selo>{destaque(perfil)}</Selo>
-            </div>
-          </div>
-        </div>
-
-        <div className="grid md:grid-cols-2 gap-10 pt-8">
-          {/* Coluna Esquerda - Texto */}
-          <div className="space-y-8">
-             <div>
-                <h3 className="text-lg font-semibold text-white mb-2">
-                  {isStartup ? "O que resolvemos" : "Tese de Investimento"}
-                </h3>
-                <p className="text-zinc-300 leading-relaxed whitespace-pre-wrap">
-                  {isStartup ? pStartup.descricao : pInvestidor.tese}
-                </p>
-             </div>
-
-             {isStartup && pStartup.composicaoEquipe && (
-               <div>
-                  <h3 className="text-lg font-semibold text-white mb-2">Nossa Equipe</h3>
-                  <p className="text-zinc-300">{pStartup.composicaoEquipe}</p>
-               </div>
-             )}
-          </div>
-
-          {/* Coluna Direita - Dados de Negócio */}
-          <div className="space-y-6 bg-white/5 rounded-2xl p-6 sm:p-8">
-             {isStartup ? (
-                <>
-                  {pStartup.mercado && (
-                    <div>
-                      <h4 className="text-xs text-zinc-500 uppercase tracking-wider">Mercado Alvo</h4>
-                      <p className="text-lg text-white mt-1">{pStartup.mercado}</p>
-                    </div>
-                  )}
-                  {pStartup.modeloNegocio && (
-                    <div>
-                      <h4 className="text-xs text-zinc-500 uppercase tracking-wider">Modelo de Negócio</h4>
-                      <p className="text-lg text-white mt-1">{pStartup.modeloNegocio}</p>
-                    </div>
-                  )}
-                  <div className="pt-4 border-t border-white/10">
-                    <h4 className="text-xs text-zinc-500 uppercase tracking-wider mb-2">Busca captar</h4>
-                    <p className="text-3xl font-bold text-lima">{formatarReais(pStartup.valorInvestimento)}</p>
-                    <p className="text-sm text-zinc-400 mt-1">Cede {pStartup.participacaoOferecida}% de equity</p>
+        {/* DETALHES DO PERFIL */}
+        <div className="space-y-8 text-lg">
+          {perfil.papel === 'startup' ? (
+            <>
+              <section>
+                <h3 className="font-semibold text-zinc-400 mb-2">Sobre a Startup</h3>
+                <p>{perfil.descricao}</p>
+              </section>
+              <div className="grid sm:grid-cols-2 gap-6">
+                <div>
+                  <h3 className="font-semibold text-zinc-400 mb-1">Mercado</h3>
+                  <p>{perfil.mercado || 'Não informado'}</p>
+                </div>
+                <div>
+                  <h3 className="font-semibold text-zinc-400 mb-1">Modelo de Negócio</h3>
+                  <p>{perfil.modeloNegocio || 'Não informado'}</p>
+                </div>
+                <div>
+                  <h3 className="font-semibold text-zinc-400 mb-1">Equipe</h3>
+                  <p>{perfil.composicaoEquipe || 'Não informado'}</p>
+                </div>
+                <div>
+                  <h3 className="font-semibold text-zinc-400 mb-1">Investimento Buscado</h3>
+                  <p className="font-bold text-(--acento)">{destaque(perfil)}</p>
+                </div>
+              </div>
+            </>
+          ) : (
+            <>
+              <section>
+                <h3 className="font-semibold text-zinc-400 mb-2">Tese de Investimento</h3>
+                <p>{perfil.tese}</p>
+              </section>
+              <div className="grid sm:grid-cols-2 gap-6">
+                <div>
+                  <h3 className="font-semibold text-zinc-400 mb-2">Segmentos de Interesse</h3>
+                  <div className="flex flex-wrap gap-2">
+                    {perfil.segmentosInteresse?.map(s => <Tag key={s}>{s}</Tag>)}
                   </div>
-                </>
-             ) : (
-                <>
-                  <div>
-                    <h4 className="text-xs text-zinc-500 uppercase tracking-wider">Estágios preferidos</h4>
-                    <div className="flex flex-wrap gap-2 mt-2">
-                        {pInvestidor.estagiosPreferidos.map(e => (
-                          <span key={e} className="px-2 py-1 bg-white/10 rounded text-sm text-zinc-300">{e}</span>
-                        ))}
-                    </div>
+                </div>
+                <div>
+                  <h3 className="font-semibold text-zinc-400 mb-2">Estágios Preferidos</h3>
+                  <div className="flex flex-wrap gap-2">
+                    {perfil.estagiosPreferidos?.map(e => <Tag key={e}>{e}</Tag>)}
                   </div>
-                  <div className="pt-4 border-t border-white/10">
-                    <h4 className="text-xs text-zinc-500 uppercase tracking-wider mb-2">Ticket de Investimento</h4>
-                    <p className="text-2xl font-bold text-rosa">
-                       {formatarReais(pInvestidor.investimentoMinimo)} <br/>
-                       <span className="text-lg text-zinc-500 font-normal">até</span> <br/>
-                       {formatarReais(pInvestidor.investimentoMaximo)}
-                    </p>
-                  </div>
-                </>
-             )}
-          </div>
+                </div>
+                <div className="sm:col-span-2">
+                  <h3 className="font-semibold text-zinc-400 mb-1">Ticket Médio (Faixa de Investimento)</h3>
+                  <p className="font-bold text-(--acento)">{destaque(perfil)}</p>
+                </div>
+              </div>
+            </>
+          )}
         </div>
       </Cartao>
-    </div>
+    </>
   )
 }

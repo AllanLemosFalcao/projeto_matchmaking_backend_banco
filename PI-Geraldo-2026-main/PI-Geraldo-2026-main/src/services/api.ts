@@ -167,9 +167,7 @@ export async function aceitarPendente(alvoId: string): Promise<Match | null> {
 
 /** IDs em quem o usuário já registrou interesse. */
 export async function interessesEnviados(usuarioId: string): Promise<string[]> {
-  // O Front-end usava isso para não mostrar o botão em quem já demos like.
-  // Temporariamente retornamos vazio. Numa futura melhoria, podemos criar a rota GET /match/enviados.
-  return [];
+  return await http<string[]>('/match/enviados', { method: 'GET' });
 }
 
 /** Perfis que registraram interesse no usuário e ainda não viraram match. */
@@ -219,4 +217,20 @@ export async function buscarPerfilPorId(id: string): Promise<Perfil> {
   return await http<Perfil>(`/perfil/${id}`, {
     method: 'GET'
   });
+}
+
+/** Recusa um interesse pendente */
+export async function recusarPendente(alvoId: string): Promise<void> {
+  try {
+     await http('/match/recusar', {
+        method: 'POST',
+        body: JSON.stringify({ alvoId })
+     });
+  } catch(e) {
+     console.error("Erro ao recusar interesse", e);
+  }
+}
+
+export async function detalhesDashboard(usuarioId: string): Promise<any> {
+  return await http<any>('/dashboard/detalhes', { method: 'GET' });
 }

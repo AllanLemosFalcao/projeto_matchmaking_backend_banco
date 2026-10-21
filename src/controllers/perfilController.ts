@@ -45,8 +45,10 @@ export const atualizarPerfil = async (req: AuthRequest, res: Response) => {
         });
 
         // 2. Atualiza dados específicos baseado no papel
+        // 2. Atualiza dados específicos baseado no papel
         if (usuarioAtualizado.tipo_usuario === 'startup') {
-            await prisma.startup.update({
+            // Atualiza os dados básicos da startup e guarda o resultado na variável 'st'
+            const st = await prisma.startup.update({
                 where: { id_usuario: usuarioId },
                 data: {
                     cidade: dados.localizacao,
@@ -59,6 +61,28 @@ export const atualizarPerfil = async (req: AuthRequest, res: Response) => {
                     participacao_oferecida: dados.participacaoOferecida
                 }
             });
+
+            // === NOVA LÓGICA: Atualiza o segmento da Startup ===
+            if (dados.segmento) {
+                // 1. Remove as ligações de segmentos antigos desta startup
+                await prisma.startup_segmento.deleteMany({ 
+                    where: { id_startup: st.id_startup } 
+                });
+
+                // 2. Procura se o novo segmento escolhido já existe no banco, se não, cria
+                let seg = await prisma.segmento.findFirst({ where: { nome: dados.segmento } });
+                if (!seg) {
+                    seg = await prisma.segmento.create({ 
+                        data: { id_segmento: randomUUID(), nome: dados.segmento } 
+                    });
+                }
+
+                // 3. Cria a nova ligação entre a startup e o novo segmento
+                await prisma.startup_segmento.create({
+                    data: { id_startup: st.id_startup, id_segmento: seg.id_segmento, principal: true }
+                });
+            }
+            
         } else if (usuarioAtualizado.tipo_usuario === 'investidor') {
             await prisma.investidor.update({
                 where: { id_usuario: usuarioId },

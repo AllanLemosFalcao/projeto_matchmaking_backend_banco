@@ -118,11 +118,19 @@ export function Conversas() {
         <section className={`min-h-0 flex-col ${matchId ? 'flex' : 'hidden md:flex'}`}>
           {aberta && (
             <header className="flex items-center gap-3 border-b border-borda/70 px-5 py-3">
-              <Link to="/conversas" className="md:hidden" aria-label="Voltar">
+              <Link to="/conversas" className="md:hidden shrink-0" aria-label="Voltar">
                 <IconeVoltar />
               </Link>
-              <FotoPerfil perfil={aberta.outro} tamanho="sm" />
-              <p className="font-medium">{aberta.outro.nome}</p>
+              
+              {/* Link envolvendo a foto e o nome, direcionando para o perfil */}
+              <Link 
+                to={`/perfil/${aberta.outro.id}`} 
+                className="flex items-center gap-3 min-w-0 transition hover:opacity-80"
+                aria-label={`Ver perfil de ${aberta.outro.nome}`}
+              >
+                <FotoPerfil perfil={aberta.outro} tamanho="sm" />
+                <p className="truncate font-medium">{aberta.outro.nome}</p>
+              </Link>
             </header>
           )}
 
